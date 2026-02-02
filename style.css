@@ -912,16 +912,22 @@ body {
 }
 
 .message-images-placeholder {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.message-images-placeholder .image-name {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
+  gap: 4px;
+  padding: 6px 10px;
   background: var(--input-bg);
   border: 1px dashed var(--border-color);
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--text-secondary);
-  font-size: 13px;
-  margin-top: 8px;
+  font-size: 12px;
 }
 
 /* Drag and drop overlay */

@@ -2045,10 +2045,15 @@ Example: [0, 2, 5]`;
       if (sessionImgs && sessionImgs.length > 0) {
         // Have actual images from current session
         imagesHtml = `<div class="message-images">${sessionImgs.map(img => 
-          `<img src="${img.base64}" alt="Uploaded image" onclick="window.open('${img.base64}', '_blank')">`
+          `<img src="${img.base64}" alt="${this.escapeHtml(img.name || 'image')}" title="${this.escapeHtml(img.name || 'image')}" onclick="window.open('${img.base64}', '_blank')">`
+        ).join('')}</div>`;
+      } else if (msg.imageNames && msg.imageNames.length > 0) {
+        // Historical message - show filenames
+        imagesHtml = `<div class="message-images-placeholder">${msg.imageNames.map(name => 
+          `<span class="image-name">🖼️ ${this.escapeHtml(name)}</span>`
         ).join('')}</div>`;
       } else if (msg.imageCount > 0) {
-        // Historical message - show placeholder
+        // Legacy format with count only
         imagesHtml = `<div class="message-images-placeholder">🖼️ ${msg.imageCount} image${msg.imageCount > 1 ? 's' : ''} attached</div>`;
       } else if (msg.images && msg.images.length > 0) {
         // Legacy format (old chats that still have images stored)
@@ -3356,10 +3361,11 @@ Example: [0, 2, 5]`;
     // Build attachments array for images (OpenClaw format)
     let attachments = null;
     if (hasImages) {
-      // Store images for display
+      // Store images for display (includes name for session display)
       images = this.pendingImages.map(img => ({
         base64: img.base64,
-        mimeType: img.mimeType
+        mimeType: img.mimeType,
+        name: img.name || 'image'
       }));
       
       // Build attachments for API (OpenClaw expects this format)
@@ -3391,11 +3397,11 @@ Example: [0, 2, 5]`;
 
     // Add user message
     // Note: We don't persist full image data to save storage
-    // Just store the count for display purposes
+    // Just store filenames for reference
     const userMsg = {
       role: 'user',
       content: displayContent || '[File]',
-      imageCount: images?.length || 0, // Just store count, not full base64
+      imageNames: images?.map(img => img.name || 'image') || [], // Store names only
       textFiles: textFiles, // Store text files for display (small)
       timestamp: Date.now()
     };
