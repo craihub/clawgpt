@@ -42,31 +42,60 @@
 
 ## 🚀 Quick Start
 
-**1. Start OpenClaw** ([install guide](https://docs.openclaw.ai))
+### Step 1: Install OpenClaw (if you haven't already)
 
-**2. Download ClawGPT**
+First, install [Node.js](https://nodejs.org/) (LTS version), then open a terminal:
 
-[⬇️ Download ZIP](https://github.com/craihub/clawgpt/archive/refs/heads/main.zip)
+```bash
+npm install -g openclaw
+openclaw wizard
+```
 
-Extract to your **home folder** as `clawgpt`:
-- **Mac/Linux:** `~/clawgpt/`
-- **Windows:** `C:\Users\YourName\clawgpt\`
+The wizard will ask how you want to authenticate:
+
+| Option | Best for |
+|--------|----------|
+| **OAuth (Claude.ai)** | Already have a Claude Pro subscription ($20/mo)? Use that! |
+| **API Key** | Pay-per-use via console.anthropic.com |
+
+> 💡 **OAuth lets you use your existing Claude.ai subscription** — no extra API costs!
+
+Start the gateway:
+```bash
+openclaw gateway
+```
+
+You can now talk to OpenClaw in your terminal. Try: *"Hello!"*
+
+---
+
+### Step 2: Set up ClawGPT
+
+Once OpenClaw is running, **just ask it:**
+
+> *"Help me set up ClawGPT"*
+
+OpenClaw will walk you through downloading and configuring everything.
+
+**Or do it manually:**
+
+1. [⬇️ Download ClawGPT ZIP](https://github.com/craihub/clawgpt/archive/refs/heads/main.zip)
+
+2. Extract to your **home folder** as `clawgpt`:
+   - **Mac/Linux:** `~/clawgpt/`
+   - **Windows:** `C:\Users\YourName\clawgpt\`
+
+3. Start the web server (in the clawgpt folder):
+   ```bash
+   python3 -m http.server 8080
+   ```
+
+4. Open http://localhost:8080
+
+5. The setup wizard will ask for your token. Just ask OpenClaw:
+   > *"What's my gateway token?"*
 
 > 💡 **Can't find your home folder?** Ask OpenClaw: *"open my clawgpt folder"*
-
-**3. Start the server**
-
-Open a terminal in the clawgpt folder and run:
-```bash
-python3 -m http.server 8080
-```
-
-**4. Open in browser**
-```
-http://localhost:8080
-```
-
-The setup wizard will guide you through connecting to OpenClaw.
 
 ---
 
@@ -139,7 +168,7 @@ clawgpt/
 
 | | ChatGPT | ClawGPT |
 |---|---------|---------|
-| **Cost** | $20/month | Free |
+| **Cost** | $20/month | Free (use your Claude.ai sub via OAuth) |
 | **Privacy** | Data sent to OpenAI | Stays on your machine |
 | **Internet** | Required | Works offline |
 | **Model choice** | GPT-4 only | Any model via OpenClaw |
