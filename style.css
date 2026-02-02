@@ -586,16 +586,73 @@ body {
   color: #333;
 }
 
+/* Code block container */
+.code-block {
+  position: relative;
+  margin: 16px 0;
+}
+
+.code-block pre {
+  margin: 0;
+}
+
+/* Copy button for code blocks */
+.code-copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 4px;
+  color: #888;
+  cursor: pointer;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all 0.15s;
+  z-index: 1;
+}
+
+.code-block:hover .code-copy-btn {
+  opacity: 1;
+}
+
+.code-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.code-copy-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.code-copy-btn.copied {
+  color: var(--accent-color);
+}
+
 /* Language label */
-.message-content pre::before {
+.code-block pre[data-language]::before {
   content: attr(data-language);
   position: absolute;
   top: 8px;
-  right: 12px;
+  right: 40px;
   font-size: 11px;
-  color: #888;
+  color: #666;
   text-transform: uppercase;
   font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+[data-theme="light"] .code-copy-btn {
+  background: rgba(0, 0, 0, 0.05);
+  color: #666;
+}
+
+[data-theme="light"] .code-copy-btn:hover {
+  background: rgba(0, 0, 0, 0.1);
+  color: #333;
 }
 
 .typing-indicator {

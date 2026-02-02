@@ -2455,11 +2455,13 @@ Example: [0, 2, 5]`;
   formatContent(content) {
     if (!content) return '';
 
-    // Basic markdown-like formatting
-    let html = this.escapeHtml(content);
-
-    // Code blocks with language detection for Prism.js
+    // Store code blocks temporarily to protect them from other transformations
+    const codeBlocks = [];
+    let html = content;
+    
+    // Extract and placeholder code blocks first
     html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, (match, lang, code) => {
+      const index = codeBlocks.length;
       // Map common language aliases
       const langMap = {
         'js': 'javascript',
@@ -2469,15 +2471,15 @@ Example: [0, 2, 5]`;
         'sh': 'bash',
         'shell': 'bash',
         'yml': 'yaml',
-        'md': 'markdown',
-        'plaintext': '',
-        '': ''
+        'md': 'markdown'
       };
       const language = langMap[lang] || lang || '';
-      const langClass = language ? `language-${language}` : '';
-      const langAttr = language ? `data-language="${language}"` : '';
-      return `<pre ${langAttr}><code class="${langClass}">${code.trim()}</code></pre>`;
+      codeBlocks.push({ language, code: code.trim() });
+      return `__CODEBLOCK_${index}__`;
     });
+    
+    // Now escape HTML for the rest
+    html = this.escapeHtml(html);
 
     // Inline code
     html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
@@ -2488,11 +2490,17 @@ Example: [0, 2, 5]`;
     // Italic
     html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
 
-    // Line breaks (but not inside pre tags)
+    // Line breaks
     html = html.replace(/\n/g, '<br>');
-    // Fix: remove <br> inside pre/code blocks
-    html = html.replace(/<pre><code([^>]*)>([\s\S]*?)<\/code><\/pre>/g, (match, attrs, code) => {
-      return `<pre><code${attrs}>${code.replace(/<br>/g, '\n')}</code></pre>`;
+    
+    // Restore code blocks with proper formatting and copy button
+    html = html.replace(/__CODEBLOCK_(\d+)__/g, (match, index) => {
+      const block = codeBlocks[parseInt(index)];
+      const langClass = block.language ? `language-${block.language}` : '';
+      const langAttr = block.language ? `data-language="${block.language}"` : '';
+      const escapedCode = this.escapeHtml(block.code);
+      const copyIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+      return `<div class="code-block"><button class="code-copy-btn" title="Copy code">${copyIcon}</button><pre ${langAttr}><code class="${langClass}">${escapedCode}</code></pre></div>`;
     });
 
     return html;
@@ -2503,6 +2511,26 @@ Example: [0, 2, 5]`;
     if (typeof Prism !== 'undefined') {
       Prism.highlightAll();
     }
+    
+    // Attach copy button handlers to code blocks
+    this.elements.messages.querySelectorAll('.code-copy-btn').forEach(btn => {
+      if (btn.dataset.bound) return; // Already bound
+      btn.dataset.bound = 'true';
+      
+      btn.addEventListener('click', () => {
+        const codeBlock = btn.closest('.code-block');
+        const code = codeBlock.querySelector('code').textContent;
+        
+        navigator.clipboard.writeText(code).then(() => {
+          btn.classList.add('copied');
+          btn.innerHTML = '✓';
+          setTimeout(() => {
+            btn.classList.remove('copied');
+            btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+          }, 1500);
+        });
+      });
+    });
   }
 
   escapeHtml(text) {
