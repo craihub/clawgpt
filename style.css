@@ -1507,12 +1507,9 @@ body {
 
 .sidebar.collapsed .sidebar-search,
 .sidebar.collapsed .section-header,
-.sidebar.collapsed .chat-title,
-.sidebar.collapsed .chat-actions,
 .sidebar.collapsed .btn-text,
 .sidebar.collapsed .expand-pinned-btn,
-.sidebar.collapsed .branch-indicator,
-.sidebar.collapsed .summary-indicator {
+.sidebar.collapsed .chat-list {
   display: none;
 }
 
@@ -1527,16 +1524,6 @@ body {
   flex: 1;
 }
 
-.sidebar.collapsed .chat-item {
-  padding: 12px;
-  justify-content: center;
-  margin: 2px 4px;
-}
-
-.sidebar.collapsed .chat-item .avatar-mini {
-  display: flex;
-}
-
 .sidebar.collapsed .collapse-btn svg {
   transform: rotate(180deg);
 }
@@ -1548,20 +1535,6 @@ body {
 
 .sidebar.collapsed .sidebar-header {
   padding: 8px;
-}
-
-/* Mini avatar for collapsed state */
-.chat-item .avatar-mini {
-  display: none;
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  background: var(--accent-color);
-  color: white;
-  font-size: 12px;
-  font-weight: 600;
-  align-items: center;
-  justify-content: center;
 }
 
 /* Smooth width transition */
