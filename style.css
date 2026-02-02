@@ -449,6 +449,12 @@ body {
   word-break: break-all;
 }
 
+.setting-hint.warning {
+  color: #f59e0b;
+  display: block;
+  margin-top: 8px;
+}
+
 /* Main area */
 .main {
   flex: 1;
