@@ -4,7 +4,13 @@
 
 ![ClawGPT Screenshot](screenshot.png)
 
-**ClawGPT** gives you a familiar ChatGPT-like experience for your local AI. No cloud, no subscription, no data leaving your machine. Full ChatGPT-style editing, branching, and regeneration — the features power users actually want.
+**Already use ChatGPT? Have a Claude.ai subscription?** ClawGPT gives you the same familiar chat experience — no learning curve, just a better interface for the AI you're already paying for.
+
+✅ Use your existing Claude.ai subscription (via OAuth)  
+✅ ChatGPT-style editing, branching, and regeneration  
+✅ Your data stays on your machine  
+✅ Works offline  
+✅ Completely free and open source
 
 ## ✨ Features
 
