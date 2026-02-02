@@ -514,6 +514,13 @@ class ClawGPT {
     if (collapseBtn) {
       collapseBtn.addEventListener('click', () => this.toggleSidebarCollapse());
     }
+    
+    // Search button (collapsed sidebar)
+    const searchBtnCollapsed = document.getElementById('searchBtnCollapsed');
+    if (searchBtnCollapsed) {
+      searchBtnCollapsed.addEventListener('click', () => this.openSearch());
+    }
+    
     // Apply saved collapse state
     this.applySidebarCollapseState();
 

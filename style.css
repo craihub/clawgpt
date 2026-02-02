@@ -1505,6 +1505,34 @@ body {
   width: 60px;
 }
 
+/* Search button - only visible when collapsed */
+.search-btn-collapsed {
+  display: none;
+  width: 100%;
+  padding: 12px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.search-btn-collapsed:hover {
+  background: var(--bg-tertiary);
+}
+
+.search-btn-collapsed svg {
+  width: 16px;
+  height: 16px;
+}
+
+.sidebar.collapsed .search-btn-collapsed {
+  display: flex;
+}
+
 .sidebar.collapsed .sidebar-search,
 .sidebar.collapsed .section-header,
 .sidebar.collapsed .btn-text,
