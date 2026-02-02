@@ -543,16 +543,59 @@ body {
 }
 
 .message-content pre {
-  background: var(--bg-secondary);
+  background: #2d2d2d;
   padding: 16px;
   border-radius: 8px;
   overflow-x: auto;
   margin: 16px 0;
+  position: relative;
 }
 
 .message-content pre code {
   background: transparent;
   padding: 0;
+  font-family: 'SF Mono', Monaco, 'Consolas', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Prism.js overrides */
+.message-content pre[class*="language-"],
+.message-content code[class*="language-"] {
+  font-family: 'SF Mono', Monaco, 'Consolas', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.message-content pre[class*="language-"] {
+  background: #2d2d2d;
+  margin: 16px 0;
+  padding: 16px;
+  border-radius: 8px;
+}
+
+/* Light theme code blocks */
+[data-theme="light"] .message-content pre,
+[data-theme="light"] .message-content pre[class*="language-"] {
+  background: #f5f5f5;
+}
+
+[data-theme="light"] .message-content code[class*="language-"],
+[data-theme="light"] .message-content pre[class*="language-"] {
+  color: #333;
+}
+
+/* Language label */
+.message-content pre::before {
+  content: attr(data-language);
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: 11px;
+  color: #888;
+  text-transform: uppercase;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 .typing-indicator {

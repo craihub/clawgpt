@@ -2050,6 +2050,7 @@ Example: [0, 2, 5]`;
     }
 
     this.scrollToBottom();
+    this.highlightCode();
   }
   
   attachMessageActions() {
@@ -2457,8 +2458,26 @@ Example: [0, 2, 5]`;
     // Basic markdown-like formatting
     let html = this.escapeHtml(content);
 
-    // Code blocks
-    html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+    // Code blocks with language detection for Prism.js
+    html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, (match, lang, code) => {
+      // Map common language aliases
+      const langMap = {
+        'js': 'javascript',
+        'ts': 'typescript',
+        'py': 'python',
+        'rb': 'ruby',
+        'sh': 'bash',
+        'shell': 'bash',
+        'yml': 'yaml',
+        'md': 'markdown',
+        'plaintext': '',
+        '': ''
+      };
+      const language = langMap[lang] || lang || '';
+      const langClass = language ? `language-${language}` : '';
+      const langAttr = language ? `data-language="${language}"` : '';
+      return `<pre ${langAttr}><code class="${langClass}">${code.trim()}</code></pre>`;
+    });
 
     // Inline code
     html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
@@ -2469,10 +2488,21 @@ Example: [0, 2, 5]`;
     // Italic
     html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
 
-    // Line breaks
+    // Line breaks (but not inside pre tags)
     html = html.replace(/\n/g, '<br>');
+    // Fix: remove <br> inside pre/code blocks
+    html = html.replace(/<pre><code([^>]*)>([\s\S]*?)<\/code><\/pre>/g, (match, attrs, code) => {
+      return `<pre><code${attrs}>${code.replace(/<br>/g, '\n')}</code></pre>`;
+    });
 
     return html;
+  }
+  
+  highlightCode() {
+    // Trigger Prism.js highlighting if available
+    if (typeof Prism !== 'undefined') {
+      Prism.highlightAll();
+    }
   }
 
   escapeHtml(text) {
