@@ -190,10 +190,88 @@ class ClawGPT {
     
     // Check if we need to show setup wizard
     if (!this.hasConfigFile && !this.authToken) {
-      this.showSetupWizard();
+      // Try connecting without auth first - many local setups don't require it
+      const noAuthNeeded = await this.tryConnectWithoutAuth();
+      if (noAuthNeeded) {
+        this.autoConnect();
+      } else {
+        this.showSetupWizard();
+      }
     } else {
       this.autoConnect();
     }
+  }
+  
+  // Try to connect without auth - returns true if gateway accepts unauthenticated connections
+  async tryConnectWithoutAuth() {
+    return new Promise((resolve) => {
+      const testUrl = this.gatewayUrl || 'ws://localhost:18789';
+      let ws;
+      
+      const cleanup = () => {
+        try { ws?.close(); } catch {}
+      };
+      
+      const timeout = setTimeout(() => {
+        cleanup();
+        resolve(false);
+      }, 3000);
+      
+      try {
+        ws = new WebSocket(testUrl);
+        
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            // If we get a challenge, try connecting without token
+            if (msg.type === 'event' && msg.event === 'connect.challenge') {
+              // Send connect without auth
+              ws.send(JSON.stringify({
+                type: 'req',
+                id: '1',
+                method: 'connect',
+                params: {
+                  minProtocol: 3,
+                  maxProtocol: 3,
+                  client: { id: 'clawgpt-probe', version: '0.1.0' },
+                  role: 'operator',
+                  scopes: [],
+                  auth: {}
+                }
+              }));
+            }
+            // If we get a successful response, no auth needed!
+            if (msg.type === 'res' && msg.ok && msg.payload?.type === 'hello-ok') {
+              clearTimeout(timeout);
+              cleanup();
+              console.log('Gateway accepts unauthenticated connections');
+              resolve(true);
+            }
+            // If we get an error about auth, auth is required
+            if (msg.type === 'res' && !msg.ok) {
+              clearTimeout(timeout);
+              cleanup();
+              console.log('Gateway requires authentication');
+              resolve(false);
+            }
+          } catch {}
+        };
+        
+        ws.onerror = () => {
+          clearTimeout(timeout);
+          cleanup();
+          resolve(false);
+        };
+        
+        ws.onclose = () => {
+          clearTimeout(timeout);
+          resolve(false);
+        };
+      } catch {
+        clearTimeout(timeout);
+        resolve(false);
+      }
+    });
   }
 
   // Settings
