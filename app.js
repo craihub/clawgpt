@@ -2765,12 +2765,29 @@ Example: [0, 2, 5]`;
     return textExtensions.some(ext => name.endsWith(ext)) || file.type.startsWith('text/');
   }
   
+  isPdfFile(file) {
+    return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+  }
+  
+  isExcelFile(file) {
+    const excelTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel'
+    ];
+    const name = file.name.toLowerCase();
+    return excelTypes.includes(file.type) || name.endsWith('.xlsx') || name.endsWith('.xls');
+  }
+  
   async handleFiles(files) {
     for (const file of files) {
       if (file.type.startsWith('image/')) {
         await this.handleImageFile(file);
       } else if (this.isTextFile(file)) {
         await this.handleTextFile(file);
+      } else if (this.isPdfFile(file)) {
+        await this.handlePdfFile(file);
+      } else if (this.isExcelFile(file)) {
+        await this.handleExcelFile(file);
       }
       // Silently ignore unsupported file types
     }
@@ -2848,6 +2865,190 @@ Example: [0, 2, 5]`;
     imagePreview.appendChild(item);
   }
   
+  async handlePdfFile(file) {
+    const imagePreview = document.getElementById('imagePreview');
+    
+    // Add loading preview
+    const loadingId = Date.now() + Math.random();
+    const loadingItem = document.createElement('div');
+    loadingItem.className = 'image-preview-item text-file-item loading';
+    loadingItem.dataset.loadingId = loadingId;
+    loadingItem.innerHTML = `
+      <div class="text-file-preview">
+        <div class="text-file-icon">📕</div>
+        <div class="text-file-name">${this.escapeHtml(file.name)}</div>
+        <div class="text-file-size">Loading...</div>
+      </div>
+    `;
+    imagePreview.appendChild(loadingItem);
+    this.updateFilePreview();
+    
+    try {
+      // Lazy load pdf.js
+      await this.loadPdfJs();
+      
+      // Read PDF
+      const arrayBuffer = await this.fileToArrayBuffer(file);
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      
+      // Extract text from all pages
+      let fullText = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map(item => item.str).join(' ');
+        fullText += `[Page ${i}]\n${pageText}\n\n`;
+      }
+      
+      // Remove loading, add real preview
+      loadingItem.remove();
+      
+      const textData = {
+        id: Date.now() + Math.random(),
+        content: fullText.trim(),
+        name: file.name,
+        type: 'text'
+      };
+      
+      this.pendingTextFiles.push(textData);
+      
+      const item = document.createElement('div');
+      item.className = 'image-preview-item text-file-item';
+      item.dataset.textFileId = textData.id;
+      item.innerHTML = `
+        <div class="text-file-preview">
+          <div class="text-file-icon">📕</div>
+          <div class="text-file-name" title="${this.escapeHtml(file.name)}">${this.escapeHtml(file.name)}</div>
+          <div class="text-file-size">${pdf.numPages} pages</div>
+        </div>
+        <button class="remove-image" title="Remove">×</button>
+      `;
+      
+      item.querySelector('.remove-image').addEventListener('click', () => {
+        this.removeTextFile(textData.id);
+      });
+      
+      imagePreview.appendChild(item);
+      this.onInputChange();
+      
+    } catch (error) {
+      console.error('PDF parsing failed:', error);
+      loadingItem.remove();
+      this.showToast(`Failed to parse PDF: ${error.message}`, true);
+    }
+  }
+  
+  async handleExcelFile(file) {
+    const imagePreview = document.getElementById('imagePreview');
+    
+    // Add loading preview
+    const loadingId = Date.now() + Math.random();
+    const loadingItem = document.createElement('div');
+    loadingItem.className = 'image-preview-item text-file-item loading';
+    loadingItem.dataset.loadingId = loadingId;
+    loadingItem.innerHTML = `
+      <div class="text-file-preview">
+        <div class="text-file-icon">📗</div>
+        <div class="text-file-name">${this.escapeHtml(file.name)}</div>
+        <div class="text-file-size">Loading...</div>
+      </div>
+    `;
+    imagePreview.appendChild(loadingItem);
+    this.updateFilePreview();
+    
+    try {
+      // Lazy load SheetJS
+      await this.loadSheetJs();
+      
+      // Read Excel
+      const arrayBuffer = await this.fileToArrayBuffer(file);
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+      
+      // Convert all sheets to text
+      let fullText = '';
+      for (const sheetName of workbook.SheetNames) {
+        const sheet = workbook.Sheets[sheetName];
+        const csv = XLSX.utils.sheet_to_csv(sheet);
+        fullText += `[Sheet: ${sheetName}]\n${csv}\n\n`;
+      }
+      
+      // Remove loading, add real preview
+      loadingItem.remove();
+      
+      const textData = {
+        id: Date.now() + Math.random(),
+        content: fullText.trim(),
+        name: file.name,
+        type: 'text'
+      };
+      
+      this.pendingTextFiles.push(textData);
+      
+      const item = document.createElement('div');
+      item.className = 'image-preview-item text-file-item';
+      item.dataset.textFileId = textData.id;
+      item.innerHTML = `
+        <div class="text-file-preview">
+          <div class="text-file-icon">📗</div>
+          <div class="text-file-name" title="${this.escapeHtml(file.name)}">${this.escapeHtml(file.name)}</div>
+          <div class="text-file-size">${workbook.SheetNames.length} sheet${workbook.SheetNames.length > 1 ? 's' : ''}</div>
+        </div>
+        <button class="remove-image" title="Remove">×</button>
+      `;
+      
+      item.querySelector('.remove-image').addEventListener('click', () => {
+        this.removeTextFile(textData.id);
+      });
+      
+      imagePreview.appendChild(item);
+      this.onInputChange();
+      
+    } catch (error) {
+      console.error('Excel parsing failed:', error);
+      loadingItem.remove();
+      this.showToast(`Failed to parse Excel: ${error.message}`, true);
+    }
+  }
+  
+  // Lazy load pdf.js library
+  async loadPdfJs() {
+    if (window.pdfjsLib) return;
+    
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      script.onload = () => {
+        // Set worker source
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        resolve();
+      };
+      script.onerror = () => reject(new Error('Failed to load PDF library'));
+      document.head.appendChild(script);
+    });
+  }
+  
+  // Lazy load SheetJS library
+  async loadSheetJs() {
+    if (window.XLSX) return;
+    
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      script.onload = resolve;
+      script.onerror = () => reject(new Error('Failed to load Excel library'));
+      document.head.appendChild(script);
+    });
+  }
+  
+  fileToArrayBuffer(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  }
+  
   getFileIcon(ext) {
     const icons = {
       'js': '📜',
@@ -2869,7 +3070,10 @@ Example: [0, 2, 5]`;
       'env': '🔐',
       'ini': '⚙️',
       'conf': '⚙️',
-      'cfg': '⚙️'
+      'cfg': '⚙️',
+      'pdf': '📕',
+      'xlsx': '📗',
+      'xls': '📗'
     };
     return icons[ext] || '📄';
   }

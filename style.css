@@ -859,6 +859,14 @@ body {
   color: var(--text-muted, #888);
 }
 
+.image-preview-item.text-file-item.loading {
+  opacity: 0.7;
+}
+
+.image-preview-item.text-file-item.loading .text-file-size {
+  color: var(--accent-color, #10a37f);
+}
+
 /* Text files in messages */
 .message-text-files {
   display: flex;
