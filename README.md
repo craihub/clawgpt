@@ -44,23 +44,39 @@
 
 **1. Start OpenClaw** ([install guide](https://docs.openclaw.ai))
 
-**2. Get ClawGPT**
-```bash
-git clone https://github.com/craihub/clawgpt.git
-cd clawgpt
-```
+**2. Download ClawGPT**
 
-**3. Serve it**
+[⬇️ Download ZIP](https://github.com/craihub/clawgpt/archive/refs/heads/main.zip)
+
+Extract to your **home folder** as `clawgpt`:
+- **Mac/Linux:** `~/clawgpt/`
+- **Windows:** `C:\Users\YourName\clawgpt\`
+
+> 💡 **Can't find your home folder?** Ask OpenClaw: *"open my clawgpt folder"*
+
+**3. Start the server**
+
+Open a terminal in the clawgpt folder and run:
 ```bash
 python3 -m http.server 8080
 ```
 
 **4. Open in browser**
 ```
-http://localhost:8080?token=YOUR_GATEWAY_TOKEN
+http://localhost:8080
 ```
 
-The token auto-saves and disappears from the URL. After first visit, just use `http://localhost:8080`.
+The setup wizard will guide you through connecting to OpenClaw.
+
+---
+
+### For developers
+
+```bash
+git clone https://github.com/craihub/clawgpt.git ~/clawgpt
+cd ~/clawgpt
+python3 -m http.server 8080
+```
 
 ## ⚙️ Configuration
 
@@ -138,10 +154,14 @@ clawgpt/
 
 ## 🛠️ Troubleshooting
 
+**Can't find the clawgpt folder?**
+- Ask OpenClaw: *"open my clawgpt folder"* — it'll open the folder for you
+- Default location: `~/clawgpt/` (home folder)
+
 **Can't connect?**
 - Make sure OpenClaw gateway is running (`openclaw gateway status`)
 - Check the Gateway URL (default port is 18789)
-- Verify your auth token
+- Verify your auth token — ask OpenClaw: *"what's my gateway token?"*
 
 **Messages not sending?**
 - Check browser console (F12) for errors
