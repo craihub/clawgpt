@@ -2662,6 +2662,7 @@ Example: [0, 2, 5]`;
     
     this.ttsSupported = true;
     this.currentSpeakBtn = null;
+    this.voices = [];
     
     // Load voices (may be async)
     this.loadVoices();
@@ -2671,18 +2672,25 @@ Example: [0, 2, 5]`;
   }
   
   loadVoices() {
-    const voices = speechSynthesis.getVoices();
+    this.voices = speechSynthesis.getVoices();
+    console.log('TTS voices loaded:', this.voices.length);
+    
+    if (this.voices.length === 0) return;
+    
+    // Log available voices for debugging
+    console.log('Available voices:', this.voices.map(v => `${v.name} (${v.lang})`).slice(0, 10));
     
     // Prefer Google UK English Female, then any UK female, then any English
     this.preferredVoice = 
-      voices.find(v => v.name === 'Google UK English Female') ||
-      voices.find(v => v.name.includes('UK') && v.name.includes('Female')) ||
-      voices.find(v => v.lang.startsWith('en-GB')) ||
-      voices.find(v => v.lang.startsWith('en')) ||
-      voices[0];
+      this.voices.find(v => v.name === 'Google UK English Female') ||
+      this.voices.find(v => v.name.includes('UK') && v.name.toLowerCase().includes('female')) ||
+      this.voices.find(v => v.lang === 'en-GB') ||
+      this.voices.find(v => v.lang.startsWith('en-GB')) ||
+      this.voices.find(v => v.lang.startsWith('en')) ||
+      this.voices[0];
     
     if (this.preferredVoice) {
-      console.log('TTS voice:', this.preferredVoice.name);
+      console.log('TTS preferred voice:', this.preferredVoice.name, this.preferredVoice.lang);
     }
   }
   
@@ -2715,13 +2723,21 @@ Example: [0, 2, 5]`;
       }
     }
     
+    // Ensure voices are loaded
+    if (this.voices.length === 0) {
+      this.loadVoices();
+    }
+    
     // Start speaking
     const utterance = new SpeechSynthesisUtterance(text);
+    
+    // Set voice if available, otherwise let browser use default
     if (this.preferredVoice) {
       utterance.voice = this.preferredVoice;
     }
     utterance.rate = 1.0;
     utterance.pitch = 1.0;
+    utterance.lang = 'en-GB'; // Hint for language even without specific voice
     
     utterance.onstart = () => {
       btn.innerHTML = stopIcon;
@@ -2738,16 +2754,31 @@ Example: [0, 2, 5]`;
     };
     
     utterance.onerror = (e) => {
-      if (e.error !== 'interrupted') {
-        console.error('Speech error:', e.error);
-      }
+      console.error('Speech error:', e.error);
       btn.innerHTML = speakIcon;
       btn.classList.remove('speaking');
       btn.title = 'Read aloud';
       this.currentSpeakBtn = null;
+      
+      if (e.error === 'synthesis-failed' || e.error === 'audio-busy') {
+        // Try again without specific voice
+        if (this.preferredVoice) {
+          console.log('Retrying with default voice...');
+          this.preferredVoice = null;
+          setTimeout(() => this.toggleSpeech(btn, text), 100);
+        } else {
+          this.showToast('Speech synthesis failed', true);
+        }
+      } else if (e.error !== 'interrupted' && e.error !== 'canceled') {
+        this.showToast('Speech error: ' + e.error, true);
+      }
     };
     
-    speechSynthesis.speak(utterance);
+    // Chrome bug workaround: speech can get stuck, cancel and retry
+    speechSynthesis.cancel();
+    setTimeout(() => {
+      speechSynthesis.speak(utterance);
+    }, 50);
   }
 
   scrollToBottom() {
