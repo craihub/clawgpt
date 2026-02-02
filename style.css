@@ -442,13 +442,20 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-left: auto;
+  margin-top: 8px;
   opacity: 0;
   transition: opacity 0.15s;
 }
 
 .message:hover .message-actions {
   opacity: 1;
+}
+
+/* Keep actions visible on touch devices */
+@media (hover: none) {
+  .message-actions {
+    opacity: 1;
+  }
 }
 
 .msg-action-btn {

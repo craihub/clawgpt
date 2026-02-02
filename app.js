@@ -1729,13 +1729,13 @@ Example: [0, 2, 5]`;
           <div class="message-header">
             <div class="avatar ${msg.role}">${isUser ? 'You' : 'AI'}</div>
             <span class="message-role">${isUser ? 'You' : 'ClawGPT'}</span>
-            <div class="message-actions">
-              <button class="msg-action-btn copy-btn" title="Copy">${copyIcon}</button>
-              ${isUser ? `<button class="msg-action-btn edit-btn" title="Edit">${editIcon}</button>` : ''}
-              ${isLastAssistant ? `<button class="msg-action-btn regen-btn" title="Regenerate">${regenIcon}</button>` : ''}
-            </div>
           </div>
           <div class="message-content">${this.formatContent(msg.content)}</div>
+          <div class="message-actions">
+            <button class="msg-action-btn copy-btn" title="Copy">${copyIcon}</button>
+            ${isUser ? `<button class="msg-action-btn edit-btn" title="Edit">${editIcon}</button>` : ''}
+            ${isLastAssistant ? `<button class="msg-action-btn regen-btn" title="Regenerate">${regenIcon}</button>` : ''}
+          </div>
         </div>
       `;
     }).join('');
