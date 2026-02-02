@@ -302,77 +302,81 @@
         <h2>👋 Welcome to ClawGPT</h2>
       </div>
       <div class="modal-body">
-        <p class="setup-intro">Let's connect to your OpenClaw gateway. Your settings will be saved securely in a config file.</p>
+        <p class="setup-intro">Let's connect to your OpenClaw. Just two quick steps!</p>
         
-        <div class="form-group">
-          <label for="setupGatewayUrl">Gateway URL</label>
-          <div class="input-with-status">
-            <input type="text" id="setupGatewayUrl" value="ws://127.0.0.1:18789" placeholder="ws://127.0.0.1:18789">
-            <span class="gateway-status" id="gatewayStatus"></span>
+        <!-- Step 1: Get Token -->
+        <div class="setup-step-box">
+          <div class="setup-step-header">
+            <span class="setup-step-number">1</span>
+            <span class="setup-step-title">Get your token</span>
           </div>
-          <span class="setting-hint" id="gatewayHint">Checking gateway...</span>
-        </div>
-        
-        <div class="form-group">
-          <label for="setupAuthToken">Auth Token</label>
-          <div class="token-input-row">
-            <input type="password" id="setupAuthToken" placeholder="Your OpenClaw auth token">
-            <button type="button" class="open-control-btn" id="openControlUiBtn" title="Open OpenClaw Control Panel">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                <polyline points="15 3 21 3 21 9"/>
-                <line x1="10" y1="14" x2="21" y2="3"/>
-              </svg>
-            </button>
-          </div>
-          <div class="token-help-inline">
-            <p class="token-help-text">💡 Just ask OpenClaw: <em>"What's my gateway token?"</em></p>
+          <div class="setup-step-content">
+            <div class="ask-openclaw-row">
+              <span class="ask-label">Ask OpenClaw:</span>
+              <code class="ask-phrase" id="askTokenPhrase">What's my gateway token?</code>
+              <button type="button" class="copy-btn" data-copy="What's my gateway token?" title="Copy to clipboard">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+              </button>
+            </div>
+            <div class="token-input-wrapper">
+              <input type="password" id="setupAuthToken" placeholder="Paste your token here">
+              <span class="token-status" id="tokenStatus"></span>
+            </div>
           </div>
         </div>
         
-        <div class="form-group">
-          <label for="setupSessionKey">Session Key</label>
-          <input type="text" id="setupSessionKey" value="main" placeholder="main">
-        </div>
-        
-        <div class="setup-step" id="setupStep1">
-          <div class="setup-folder-info">
-            <p><strong>Save config.js to this folder:</strong></p>
-            <code id="setupTargetFolder">Detecting...</code>
-            <p class="hidden-files-hint" id="hiddenFilesHint"></p>
-            <p class="openclaw-help-hint">Can't find it? Ask OpenClaw: <strong>open my clawgpt folder</strong></p>
+        <!-- Step 2: Save Config -->
+        <div class="setup-step-box">
+          <div class="setup-step-header">
+            <span class="setup-step-number">2</span>
+            <span class="setup-step-title">Save the config file</span>
           </div>
-          <div class="setup-actions">
+          <div class="setup-step-content">
             <button class="save-btn setup-save-btn" id="setupSaveConfigBtn">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;margin-right:6px;">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                 <polyline points="7 10 12 15 17 10"/>
                 <line x1="12" y1="15" x2="12" y2="3"/>
               </svg>
-              Save config.js
+              Download config.js
             </button>
+            <div class="setup-folder-instructions" id="setupFolderInstructions">
+              <p>Then move it to your ClawGPT folder:</p>
+              <div class="ask-openclaw-row">
+                <span class="ask-label">Ask OpenClaw:</span>
+                <code class="ask-phrase" id="askFolderPhrase">Open my clawgpt folder</code>
+                <button type="button" class="copy-btn" data-copy="Open my clawgpt folder" title="Copy to clipboard">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
+                </button>
+              </div>
+              <p class="setup-folder-hint">Drag the downloaded file into the folder that opens.</p>
+            </div>
           </div>
         </div>
         
+        <!-- Connect -->
+        <div class="setup-step" id="setupStep1">
+          <div class="setup-actions">
+            <button class="save-btn" id="setupConnectBtn">Connect</button>
+          </div>
+          <p class="setup-refresh-hint">Or just refresh this page after saving the file.</p>
+        </div>
+        
+        <!-- Hidden fields for compatibility -->
+        <input type="hidden" id="setupGatewayUrl" value="ws://127.0.0.1:18789">
+        <input type="hidden" id="setupSessionKey" value="main">
+        
+        <!-- Success state -->
         <div class="setup-step" id="setupStep2" style="display:none;">
           <div class="setup-success">
             <div class="setup-success-icon">✓</div>
-            <div class="setup-success-text">Config file saved!</div>
-          </div>
-          <div class="setup-path" id="setupPath"></div>
-          <div class="setup-actions">
-            <button class="save-btn" id="setupConnectBtn">Connect to Gateway</button>
-          </div>
-        </div>
-        
-        <div class="setup-fallback" id="setupFallback" style="display:none;">
-          <div class="setup-fallback-instructions">
-            <p><strong>Move the downloaded file to:</strong></p>
-            <code id="setupFolderPath"></code>
-            <p class="setup-hint">This is the same folder where you opened ClawGPT from.</p>
-          </div>
-          <div class="setup-actions">
-            <button class="save-btn" id="setupDoneBtn">I've moved the file</button>
+            <div class="setup-success-text">Connected!</div>
           </div>
         </div>
       </div>

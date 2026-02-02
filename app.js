@@ -348,28 +348,6 @@ class ClawGPT {
     
     modal.classList.add('open');
     this.initSetupWizard();
-    
-    // Show the target folder path
-    const folderEl = document.getElementById('setupTargetFolder');
-    const hintEl = document.getElementById('hiddenFilesHint');
-    
-    if (folderEl) {
-      folderEl.textContent = this.detectClawGPTFolder();
-    }
-    
-    // Show hidden files hint based on OS
-    if (hintEl) {
-      const isMac = navigator.platform.toLowerCase().includes('mac');
-      const isWindows = navigator.platform.toLowerCase().includes('win');
-      
-      if (isMac) {
-        hintEl.textContent = "Can't see the folder? Press Cmd + Shift + . to show hidden files";
-      } else if (isWindows) {
-        hintEl.textContent = "Can't see the folder? In File Explorer, click View → Show → Hidden items";
-      } else {
-        hintEl.textContent = "Can't see the folder? Press Ctrl + H to show hidden files";
-      }
-    }
   }
   
   initSetupWizard() {
@@ -394,6 +372,17 @@ class ClawGPT {
     if (getTokenBtn) {
       getTokenBtn.addEventListener('click', () => this.openControlPanel());
     }
+    
+    // Copy buttons
+    document.querySelectorAll('.copy-btn[data-copy]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const text = btn.dataset.copy;
+        navigator.clipboard.writeText(text).then(() => {
+          btn.classList.add('copied');
+          setTimeout(() => btn.classList.remove('copied'), 1500);
+        });
+      });
+    });
     
     // Check gateway connection
     this.checkGatewayConnection();

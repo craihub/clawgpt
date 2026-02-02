@@ -2332,3 +2332,151 @@ body {
   border-radius: 4px;
   font-style: normal;
 }
+
+/* Setup Wizard - Step boxes */
+.setup-step-box {
+  background: var(--input-bg, rgba(255,255,255,0.05));
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.setup-step-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.setup-step-number {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent-color, #10a37f);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.setup-step-title {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.setup-step-content {
+  padding-left: 40px;
+}
+
+/* Ask OpenClaw row */
+.ask-openclaw-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.ask-label {
+  font-size: 14px;
+  color: var(--text-secondary, #888);
+}
+
+.ask-phrase {
+  background: var(--bg-color, #1a1a1a);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--accent-color, #10a37f);
+  font-family: inherit;
+}
+
+.copy-btn {
+  background: transparent;
+  border: 1px solid var(--border-color, #444);
+  border-radius: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+  color: var(--text-secondary, #888);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.copy-btn:hover {
+  background: var(--input-bg);
+  color: var(--accent-color, #10a37f);
+  border-color: var(--accent-color, #10a37f);
+}
+
+.copy-btn.copied {
+  background: var(--accent-color, #10a37f);
+  color: white;
+  border-color: var(--accent-color, #10a37f);
+}
+
+/* Token input */
+.token-input-wrapper {
+  position: relative;
+}
+
+.token-input-wrapper input {
+  width: 100%;
+  padding: 12px;
+  padding-right: 40px;
+  border: 1px solid var(--border-color, #444);
+  border-radius: 8px;
+  background: var(--bg-color, #1a1a1a);
+  color: var(--text-color, #fff);
+  font-size: 14px;
+}
+
+.token-input-wrapper input:focus {
+  outline: none;
+  border-color: var(--accent-color, #10a37f);
+}
+
+.token-status {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 18px;
+}
+
+/* Setup folder instructions */
+.setup-folder-instructions {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color, #333);
+}
+
+.setup-folder-instructions p {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: var(--text-secondary, #888);
+}
+
+.setup-folder-hint {
+  font-size: 13px;
+  color: var(--text-muted, #666);
+  margin-top: 8px;
+}
+
+.setup-refresh-hint {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted, #666);
+  margin-top: 12px;
+}
+
+/* Setup intro */
+.setup-intro {
+  text-align: center;
+  margin-bottom: 24px;
+  color: var(--text-secondary);
+}
