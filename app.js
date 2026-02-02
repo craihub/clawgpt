@@ -12,6 +12,7 @@ class ClawGPT {
     this.requestId = 0;
     this.streaming = false;
     this.streamBuffer = '';
+    this.pinnedExpanded = false;
 
     this.loadSettings();
     this.loadChats();
@@ -411,29 +412,164 @@ class ClawGPT {
     }
   }
 
-  renderChatList() {
-    const chatIds = Object.keys(this.chats).sort((a, b) => {
-      return (this.chats[b].updatedAt || 0) - (this.chats[a].updatedAt || 0);
-    });
+  togglePin(chatId) {
+    const chat = this.chats[chatId];
+    if (!chat) return;
+    
+    if (chat.pinned) {
+      // Unpin
+      chat.pinned = false;
+      delete chat.pinnedOrder;
+    } else {
+      // Pin - add to end of pinned list
+      const pinnedChats = Object.values(this.chats).filter(c => c.pinned);
+      const maxOrder = pinnedChats.reduce((max, c) => Math.max(max, c.pinnedOrder || 0), 0);
+      chat.pinned = true;
+      chat.pinnedOrder = maxOrder + 1;
+    }
+    
+    this.saveChats();
+    this.renderChatList();
+  }
 
-    this.elements.chatList.innerHTML = chatIds.map(id => {
-      const chat = this.chats[id];
-      const isActive = id === this.currentChatId;
-      return `
-        <div class="chat-item ${isActive ? 'active' : ''}" data-id="${id}">
-          <span class="chat-title">${this.escapeHtml(chat.title)}</span>
-          <button class="delete-btn" data-id="${id}">&times;</button>
-        </div>
-      `;
-    }).join('');
+  handleDragStart(e, chatId) {
+    this.draggedChatId = chatId;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', chatId);
+    // Delay adding class so the drag image isn't affected
+    setTimeout(() => e.target.classList.add('dragging'), 0);
+  }
+
+  handleDragOver(e, chatId) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    
+    // Highlight the target (sticky - whole item is the zone)
+    if (chatId !== this.draggedChatId) {
+      // Clear other highlights
+      document.querySelectorAll('.chat-item.drag-over').forEach(item => {
+        if (item.dataset.id !== chatId) item.classList.remove('drag-over');
+      });
+      e.currentTarget.classList.add('drag-over');
+    }
+  }
+
+  handleDrop(e, targetChatId) {
+    e.preventDefault();
+    const draggedId = this.draggedChatId;
+    
+    if (!draggedId || draggedId === targetChatId) return;
+    
+    const draggedChat = this.chats[draggedId];
+    const targetChat = this.chats[targetChatId];
+    
+    if (!draggedChat || !targetChat) return;
+    
+    // Case 1: Both pinned - swap positions
+    if (draggedChat.pinned && targetChat.pinned) {
+      const draggedOrder = draggedChat.pinnedOrder;
+      draggedChat.pinnedOrder = targetChat.pinnedOrder;
+      targetChat.pinnedOrder = draggedOrder;
+    }
+    // Case 2: Dragging unpinned onto pinned - take its spot, displaced goes to end
+    else if (!draggedChat.pinned && targetChat.pinned) {
+      // Find the max pinned order
+      const maxOrder = Object.values(this.chats)
+        .filter(c => c.pinned)
+        .reduce((max, c) => Math.max(max, c.pinnedOrder || 0), 0);
+      
+      // New chat takes the target's position
+      draggedChat.pinned = true;
+      draggedChat.pinnedOrder = targetChat.pinnedOrder;
+      
+      // Displaced chat goes to end of pinned list
+      targetChat.pinnedOrder = maxOrder + 1;
+    }
+    // Case 3: Dragging pinned onto unpinned - unpin
+    else if (draggedChat.pinned && !targetChat.pinned) {
+      draggedChat.pinned = false;
+      delete draggedChat.pinnedOrder;
+    }
+    
+    this.saveChats();
+    this.renderChatList();
+  }
+
+  handleDragEnd(e) {
+    this.draggedChatId = null;
+    document.querySelectorAll('.chat-item').forEach(item => {
+      item.classList.remove('dragging', 'drag-over');
+    });
+  }
+
+  renderChatList() {
+    // Separate pinned and unpinned
+    const allChats = Object.entries(this.chats);
+    const pinnedChats = allChats
+      .filter(([_, c]) => c.pinned)
+      .sort((a, b) => (a[1].pinnedOrder || 0) - (b[1].pinnedOrder || 0));
+    const unpinnedChats = allChats
+      .filter(([_, c]) => !c.pinned)
+      .sort((a, b) => (b[1].updatedAt || 0) - (a[1].updatedAt || 0));
+
+    let html = '';
+
+    // Render pinned section
+    if (pinnedChats.length > 0) {
+      const visiblePinned = pinnedChats.slice(0, 5);
+      const hiddenPinned = pinnedChats.slice(5);
+      const isExpanded = this.pinnedExpanded;
+
+      html += '<div class="pinned-section">';
+      html += `<div class="section-header"><svg class="pin-icon pinned" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;margin-right:4px;vertical-align:middle;"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>Pinned</div>`;
+      
+      visiblePinned.forEach(([id, chat]) => {
+        html += this.renderChatItem(id, chat, true);
+      });
+
+      if (hiddenPinned.length > 0) {
+        html += `<button class="expand-pinned-btn" id="expandPinnedBtn">
+          ${isExpanded ? '▼' : '▶'} ${hiddenPinned.length} more pinned
+        </button>`;
+        
+        if (isExpanded) {
+          html += '<div class="hidden-pinned">';
+          hiddenPinned.forEach(([id, chat]) => {
+            html += this.renderChatItem(id, chat, true);
+          });
+          html += '</div>';
+        }
+      }
+      
+      html += '</div>';
+    }
+
+    // Render unpinned section
+    if (unpinnedChats.length > 0) {
+      if (pinnedChats.length > 0) {
+        html += '<div class="section-header">Recent</div>';
+      }
+      unpinnedChats.forEach(([id, chat]) => {
+        html += this.renderChatItem(id, chat, false);
+      });
+    }
+
+    this.elements.chatList.innerHTML = html;
 
     // Add click handlers
     this.elements.chatList.querySelectorAll('.chat-item').forEach(item => {
+      const chatId = item.dataset.id;
+      
       item.addEventListener('click', (e) => {
-        if (!e.target.classList.contains('delete-btn')) {
-          this.selectChat(item.dataset.id);
-        }
+        if (e.target.closest('.pin-btn') || e.target.closest('.delete-btn')) return;
+        this.selectChat(chatId);
       });
+
+      // Drag handlers for all items
+      item.addEventListener('dragstart', (e) => this.handleDragStart(e, chatId));
+      item.addEventListener('dragover', (e) => this.handleDragOver(e, chatId));
+      item.addEventListener('drop', (e) => this.handleDrop(e, chatId));
+      item.addEventListener('dragend', (e) => this.handleDragEnd(e));
     });
 
     this.elements.chatList.querySelectorAll('.delete-btn').forEach(btn => {
@@ -442,6 +578,40 @@ class ClawGPT {
         this.deleteChat(btn.dataset.id);
       });
     });
+
+    this.elements.chatList.querySelectorAll('.pin-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.togglePin(btn.dataset.id);
+      });
+    });
+
+    const expandBtn = document.getElementById('expandPinnedBtn');
+    if (expandBtn) {
+      expandBtn.addEventListener('click', () => {
+        this.pinnedExpanded = !this.pinnedExpanded;
+        this.renderChatList();
+      });
+    }
+  }
+
+  renderChatItem(id, chat, isPinned) {
+    const isActive = id === this.currentChatId;
+    const pinTitle = isPinned ? 'Unpin' : 'Pin';
+    const pinIcon = `<svg class="pin-icon ${isPinned ? 'pinned' : ''}" viewBox="0 0 24 24" fill="${isPinned ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="12" y1="17" x2="12" y2="22"/>
+      <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/>
+    </svg>`;
+    
+    return `
+      <div class="chat-item ${isActive ? 'active' : ''} ${isPinned ? 'pinned' : ''}" data-id="${id}" data-pinned="${isPinned}" draggable="true">
+        <span class="chat-title">${this.escapeHtml(chat.title)}</span>
+        <div class="chat-actions">
+          <button class="pin-btn" data-id="${id}" title="${pinTitle}">${pinIcon}</button>
+          <button class="delete-btn" data-id="${id}">&times;</button>
+        </div>
+      </div>
+    `;
   }
 
   renderMessages() {
