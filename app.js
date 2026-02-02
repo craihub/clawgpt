@@ -3049,6 +3049,16 @@ Example: [0, 2, 5]`;
     });
   }
   
+  // Parse data URL into mimeType and base64 content
+  parseDataUrl(dataUrl) {
+    const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
+    if (match) {
+      return { mimeType: match[1], content: match[2] };
+    }
+    // Fallback - assume it's already just base64
+    return { mimeType: 'application/octet-stream', content: dataUrl };
+  }
+  
   getFileIcon(ext) {
     const icons = {
       'js': '📜',
@@ -3329,6 +3339,8 @@ Example: [0, 2, 5]`;
         : fileContents;
     }
     
+    // Build attachments array for images (OpenClaw format)
+    let attachments = null;
     if (hasImages) {
       // Store images for display
       images = this.pendingImages.map(img => ({
@@ -3336,30 +3348,19 @@ Example: [0, 2, 5]`;
         mimeType: img.mimeType
       }));
       
-      // Build multimodal content for API
-      const contentParts = [];
-      
-      // Add images first
-      for (const img of this.pendingImages) {
-        contentParts.push({
-          type: 'image_url',
-          image_url: { url: img.base64 }
-        });
-      }
-      
-      // Add text if present (including any text file contents)
-      if (fullText) {
-        contentParts.push({
-          type: 'text',
-          text: fullText
-        });
-      }
-      
-      messageContent = contentParts;
-    } else {
-      // No images - just send text (including text file contents)
-      messageContent = fullText;
+      // Build attachments for API (OpenClaw expects this format)
+      attachments = this.pendingImages.map(img => {
+        const parsed = this.parseDataUrl(img.base64);
+        return {
+          type: 'image',
+          mimeType: parsed.mimeType,
+          content: parsed.content // base64 without data: prefix
+        };
+      });
     }
+    
+    // Message content is always just the text
+    messageContent = fullText || '';
     
     // Clear pending files
     this.clearPendingImages();
@@ -3395,16 +3396,23 @@ Example: [0, 2, 5]`;
     this.renderMessages();
 
     try {
-      // Track input tokens (estimate for full content being sent)
-      const tokenText = typeof messageContent === 'string' ? messageContent : fullText || '';
-      this.addTokens(this.estimateTokens(tokenText));
+      // Track input tokens
+      this.addTokens(this.estimateTokens(messageContent || ''));
       
-      await this.request('chat.send', {
+      // Build request params
+      const params = {
         sessionKey: this.sessionKey,
         message: messageContent,
         deliver: false,
         idempotencyKey: this.generateId()
-      });
+      };
+      
+      // Add attachments if we have images
+      if (attachments && attachments.length > 0) {
+        params.attachments = attachments;
+      }
+      
+      await this.request('chat.send', params);
       // Response will come via chat events
     } catch (error) {
       console.error('Send failed:', error);
