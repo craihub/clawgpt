@@ -54,6 +54,14 @@
           </svg>
           <span class="btn-text">Settings</span>
         </button>
+        <button class="help-btn" id="helpBtn" title="Keyboard shortcuts">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+          <span class="btn-text">Help</span>
+        </button>
         <button class="collapse-btn" id="collapseBtn" title="Collapse sidebar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="11 17 6 12 11 7"></polyline>
@@ -299,6 +307,70 @@
         <div class="settings-actions">
           <button class="cancel-btn" id="cancelRenameBtn">Cancel</button>
           <button class="save-btn" id="saveRenameBtn">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shortcuts Modal -->
+  <div class="modal" id="shortcutsModal">
+    <div class="modal-content modal-small">
+      <div class="modal-header">
+        <h2>Keyboard Shortcuts</h2>
+        <button class="close-btn" id="closeShortcuts">&times;</button>
+      </div>
+      <div class="modal-body shortcuts-body">
+        <div class="shortcut-group">
+          <div class="shortcut-group-title">General</div>
+          <div class="shortcut-row">
+            <span class="shortcut-desc">Send message</span>
+            <span class="shortcut-keys"><kbd>Enter</kbd></span>
+          </div>
+          <div class="shortcut-row">
+            <span class="shortcut-desc">New line</span>
+            <span class="shortcut-keys"><kbd>Shift</kbd> + <kbd>Enter</kbd></span>
+          </div>
+          <div class="shortcut-row">
+            <span class="shortcut-desc">New chat</span>
+            <span class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>N</kbd></span>
+          </div>
+        </div>
+        <div class="shortcut-group">
+          <div class="shortcut-group-title">Search</div>
+          <div class="shortcut-row">
+            <span class="shortcut-desc">Open search</span>
+            <span class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>K</kbd></span>
+          </div>
+          <div class="shortcut-row">
+            <span class="shortcut-desc">Close search</span>
+            <span class="shortcut-keys"><kbd>Esc</kbd></span>
+          </div>
+          <div class="shortcut-row">
+            <span class="shortcut-desc">Navigate results</span>
+            <span class="shortcut-keys"><kbd>↑</kbd> <kbd>↓</kbd></span>
+          </div>
+          <div class="shortcut-row">
+            <span class="shortcut-desc">Select result</span>
+            <span class="shortcut-keys"><kbd>Enter</kbd></span>
+          </div>
+        </div>
+        <div class="shortcut-group">
+          <div class="shortcut-group-title">Editing</div>
+          <div class="shortcut-row">
+            <span class="shortcut-desc">Send edited message</span>
+            <span class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>Enter</kbd></span>
+          </div>
+          <div class="shortcut-row">
+            <span class="shortcut-desc">Cancel edit</span>
+            <span class="shortcut-keys"><kbd>Esc</kbd></span>
+          </div>
+        </div>
+        <div class="shortcut-group">
+          <div class="shortcut-group-title">This modal</div>
+          <div class="shortcut-row">
+            <span class="shortcut-desc">Show shortcuts</span>
+            <span class="shortcut-keys"><kbd>?</kbd></span>
+          </div>
         </div>
       </div>
     </div>

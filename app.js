@@ -807,6 +807,9 @@ window.CLAWGPT_CONFIG = {
       newChatBtn: document.getElementById('newChatBtn'),
       settingsBtn: document.getElementById('settingsBtn'),
       settingsModal: document.getElementById('settingsModal'),
+      helpBtn: document.getElementById('helpBtn'),
+      shortcutsModal: document.getElementById('shortcutsModal'),
+      closeShortcuts: document.getElementById('closeShortcuts'),
       closeSettings: document.getElementById('closeSettings'),
       connectBtn: document.getElementById('connectBtn'),
       menuBtn: document.getElementById('menuBtn'),
@@ -867,6 +870,19 @@ window.CLAWGPT_CONFIG = {
     this.elements.settingsBtn.addEventListener('click', () => this.openSettings());
     this.elements.closeSettings.addEventListener('click', () => this.closeSettings());
     this.elements.connectBtn.addEventListener('click', () => this.connect());
+    
+    // Help/shortcuts modal
+    if (this.elements.helpBtn) {
+      this.elements.helpBtn.addEventListener('click', () => this.openShortcuts());
+    }
+    if (this.elements.closeShortcuts) {
+      this.elements.closeShortcuts.addEventListener('click', () => this.closeShortcuts());
+    }
+    if (this.elements.shortcutsModal) {
+      this.elements.shortcutsModal.addEventListener('click', (e) => {
+        if (e.target === this.elements.shortcutsModal) this.closeShortcuts();
+      });
+    }
     
     // Save settings button
     const saveSettingsBtn = document.getElementById('saveSettingsBtn');
@@ -1059,10 +1075,27 @@ window.CLAWGPT_CONFIG = {
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
+      // Don't trigger shortcuts when typing in inputs
+      const isTyping = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
+      
+      // ? to open shortcuts (when not typing)
+      if (e.key === '?' && !isTyping) {
+        e.preventDefault();
+        this.openShortcuts();
+      }
+      // Escape to close shortcuts
+      if (e.key === 'Escape' && this.elements.shortcutsModal?.classList.contains('open')) {
+        this.closeShortcuts();
+      }
       // Ctrl+K or Cmd+K to open search
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
         this.openSearch();
+      }
+      // Ctrl+Shift+N or Cmd+Shift+N for new chat
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'N') {
+        e.preventDefault();
+        this.newChat();
       }
       // Escape to close search
       if (e.key === 'Escape' && this.elements.searchModal.classList.contains('open')) {
@@ -1170,6 +1203,18 @@ window.CLAWGPT_CONFIG = {
 
   closeSettings() {
     this.elements.settingsModal.classList.remove('open');
+  }
+  
+  openShortcuts() {
+    if (this.elements.shortcutsModal) {
+      this.elements.shortcutsModal.classList.add('open');
+    }
+  }
+  
+  closeShortcuts() {
+    if (this.elements.shortcutsModal) {
+      this.elements.shortcutsModal.classList.remove('open');
+    }
   }
   
   saveAndCloseSettings() {
