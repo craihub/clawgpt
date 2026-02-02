@@ -22,11 +22,9 @@
 | Works offline | ❌ | ❌ | ❌ | ✅ |
 | Data stays on your machine | ❌ | ❌ | ✅ | ✅ |
 | Pin favorite chats | ❌ | ❌ | ❌ | ✅ |
-| Multi-channel (Telegram, etc) | ❌ | ❌ | ✅ | ❌ |
-| Agentic tools & automation | ❌ | ❌ | ✅ | ❌ |
 | Open source | ❌ | ❌ | ✅ | ✅ |
 
-**ClawGPT + OpenClaw = best of both worlds.** Use ClawGPT for the polished chat UI, and OpenClaw for automation, multi-channel access, and agentic tools.
+**Use your existing Claude.ai subscription** — no extra API costs, no new accounts, just a better interface.
 
 ## ✨ Features
 
