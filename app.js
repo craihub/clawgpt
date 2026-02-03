@@ -2393,6 +2393,11 @@ Example: [0, 2, 5]`;
   }
 
   handleMessage(msg) {
+    // Forward to relay if connected (for mobile clients)
+    if (this.relayWs && this.relayWs.readyState === WebSocket.OPEN) {
+      this.relayWs.send(JSON.stringify(msg));
+    }
+    
     // Handle challenge
     if (msg.type === 'event' && msg.event === 'connect.challenge') {
       this.sendConnect(msg.payload?.nonce);
