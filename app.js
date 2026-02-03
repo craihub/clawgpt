@@ -1150,19 +1150,21 @@ window.CLAWGPT_CONFIG = {
       this.relayCrypto = new RelayCrypto();
       const publicKey = this.relayCrypto.getPublicKey();
       
-      // Connect to relay and get channel ID
-      const relayUrl = this.relayServerUrl || 'wss://clawgpt-relay.fly.dev';
-      const channelId = await this.connectToRelay(relayUrl);
+      // Get or create persistent pairing ID
+      const pairingId = this.getOrCreatePairingId();
       
-      // Build mobile URL with relay info + our public key (NOT the auth token!)
-      // The auth token will be sent encrypted after key exchange
-      // Use web URL so it works in both browser and native app (app can intercept via intent filter)
+      // Connect to relay room (persistent - survives reconnection)
+      const relayUrl = this.relayServerUrl || 'wss://clawgpt-relay.fly.dev';
+      await this.connectToRelayRoom(relayUrl, pairingId);
+      
+      // Build mobile URL with pairing ID + our public key
+      // Phone will connect to same room and be able to reconnect later
       const webBase = window.location.origin + window.location.pathname;
-      const mobileUrl = `${webBase}?relay=${encodeURIComponent(relayUrl)}&channel=${channelId}&pubkey=${encodeURIComponent(publicKey)}`;
+      const mobileUrl = `${webBase}?relay=${encodeURIComponent(relayUrl)}&room=${pairingId}&pubkey=${encodeURIComponent(publicKey)}`;
       
       // Update display - show waiting for phone
       if (urlDisplay) {
-        urlDisplay.innerHTML = `<strong>Mode:</strong> Remote Relay (E2E Encrypted)<br><strong>Channel:</strong> ${channelId}<br><em>Waiting for phone to connect...</em>`;
+        urlDisplay.innerHTML = `<strong>Mode:</strong> Remote Relay (E2E Encrypted)<br><strong>Room:</strong> ${pairingId}<br><em>Waiting for phone to connect...</em>`;
       }
       
       this.renderQRCode(qrContainer, placeholder, mobileUrl);
@@ -1176,7 +1178,22 @@ window.CLAWGPT_CONFIG = {
     }
   }
   
-  connectToRelay(relayUrl) {
+  // Get or generate persistent pairing ID for relay rooms
+  getOrCreatePairingId() {
+    let pairingId = localStorage.getItem('clawgpt-pairing-id');
+    if (!pairingId) {
+      // Generate a memorable room ID
+      pairingId = 'cg-' + Array.from(crypto.getRandomValues(new Uint8Array(12)))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('')
+        .substring(0, 16);
+      localStorage.setItem('clawgpt-pairing-id', pairingId);
+      console.log('Generated new pairing ID:', pairingId);
+    }
+    return pairingId;
+  }
+  
+  connectToRelayRoom(relayUrl, roomId) {
     return new Promise((resolve, reject) => {
       // Close existing relay connection
       if (this.relayWs) {
@@ -1185,14 +1202,16 @@ window.CLAWGPT_CONFIG = {
       
       // Reset encryption state
       this.relayEncrypted = false;
+      this.relayRoomId = roomId;
       
-      const wsUrl = relayUrl.replace(/^http/, 'ws') + '/new';
-      console.log('Connecting to relay:', wsUrl);
+      // Connect to named room (persistent)
+      const wsUrl = relayUrl.replace(/^http/, 'ws') + '/room/' + roomId;
+      console.log('Connecting to relay room:', wsUrl);
       
       this.relayWs = new WebSocket(wsUrl);
       
       this.relayWs.onopen = () => {
-        console.log('Relay connected, waiting for channel ID...');
+        console.log('Relay WebSocket opened, waiting for room join confirmation...');
       };
       
       this.relayWs.onmessage = (event) => {
@@ -1201,12 +1220,26 @@ window.CLAWGPT_CONFIG = {
           
           // Handle relay control messages
           if (msg.type === 'relay') {
-            if (msg.event === 'channel.created') {
-              console.log('Relay channel created:', msg.channelId);
-              this.relayChannelId = msg.channelId;
-              resolve(msg.channelId);
+            if (msg.event === 'room.joined') {
+              console.log('Joined relay room:', msg.roomId, 'as', msg.role);
+              this.relayRole = msg.role;
+              resolve(msg.roomId);
+              
+              // If client is already connected, we'll get key exchange soon
+              if (msg.clientConnected) {
+                console.log('Client already connected, waiting for key exchange...');
+              }
             } else if (msg.event === 'client.connected') {
               console.log('Mobile client connected via relay, waiting for key exchange...');
+            } else if (msg.event === 'host.connected') {
+              console.log('Host reconnected');
+            } else if (msg.event === 'client.disconnected') {
+              console.log('Mobile client disconnected');
+              this.relayEncrypted = false;
+              this.showToast('Phone disconnected - will reconnect automatically', true);
+            } else if (msg.event === 'error') {
+              console.error('Relay error:', msg.error);
+              reject(new Error(msg.error));
             }
             return;
           }
@@ -1255,7 +1288,7 @@ window.CLAWGPT_CONFIG = {
       
       // Timeout
       setTimeout(() => {
-        if (!this.relayChannelId) {
+        if (!this.relayRoomId) {
           this.relayWs?.close();
           reject(new Error('Timeout'));
         }
@@ -1474,11 +1507,22 @@ window.CLAWGPT_CONFIG = {
       return;
     }
     
+    // Send our public key back (in case phone reconnected and our key changed)
+    if (this.relayWs && this.relayWs.readyState === WebSocket.OPEN) {
+      this.relayWs.send(JSON.stringify({
+        type: 'keyexchange-response',
+        publicKey: this.relayCrypto.getPublicKey()
+      }));
+    }
+    
     this.relayEncrypted = true;
     
     // Get verification code (words)
     const verifyCode = this.relayCrypto.getVerificationCode();
     console.log('E2E encryption established! Verification:', verifyCode);
+    
+    // Update status to show connected
+    this.setStatus('Connected', true);
     
     // Update the UI to show connected + verification code
     const urlDisplay = document.getElementById('mobileUrl');
