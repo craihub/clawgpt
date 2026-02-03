@@ -1862,6 +1862,7 @@ body {
     z-index: 100;
     height: 100%;
     transform: translateX(-100%);
+    width: 280px;
   }
 
   .sidebar.open {
@@ -1874,6 +1875,216 @@ body {
 
   .message {
     padding: 16px;
+    max-width: 100%;
+  }
+
+  .header {
+    padding: 12px 16px;
+  }
+
+  .title {
+    font-size: 18px;
+  }
+
+  .header-info {
+    display: none;
+  }
+
+  /* Larger touch targets */
+  .send-btn,
+  .stop-btn,
+  .attach-btn,
+  .voice-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Input area optimization */
+  .input-area {
+    padding: 12px;
+  }
+
+  .input-container {
+    gap: 8px;
+  }
+
+  #messageInput {
+    font-size: 16px; /* Prevents iOS zoom on focus */
+    padding: 12px;
+  }
+
+  /* Messages */
+  .messages {
+    padding: 12px;
+  }
+
+  .message-content {
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  .code-block {
+    font-size: 13px;
+  }
+
+  .code-block pre {
+    padding: 12px;
+  }
+
+  /* Welcome screen */
+  .welcome h2 {
+    font-size: 24px;
+  }
+
+  .welcome p {
+    font-size: 14px;
+  }
+
+  /* Modals - full screen on mobile */
+  .modal-content {
+    width: 95%;
+    max-width: none;
+    max-height: 90vh;
+    margin: 5vh auto;
+  }
+
+  .modal-body {
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+
+  .setup-wizard {
+    width: 95%;
+  }
+
+  /* Settings modal */
+  .settings-actions {
+    flex-direction: column;
+  }
+
+  .settings-actions button {
+    width: 100%;
+  }
+
+  /* Search modal */
+  .search-container {
+    width: 95%;
+    max-height: 80vh;
+  }
+
+  /* Chat list items - larger touch targets */
+  .chat-item {
+    padding: 14px 16px;
+  }
+
+  /* Action buttons on messages */
+  .message-actions {
+    opacity: 1; /* Always visible on mobile */
+  }
+
+  .message-action-btn {
+    min-width: 36px;
+    min-height: 36px;
+    padding: 8px;
+  }
+
+  /* Status indicator */
+  .status {
+    font-size: 11px;
+    padding: 4px 8px;
+  }
+}
+
+/* Safe area for notched phones */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .input-area {
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .sidebar {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .toast {
+    bottom: calc(24px + env(safe-area-inset-bottom));
+  }
+}
+
+/* Disable text selection on UI elements for cleaner mobile experience */
+.sidebar,
+.header,
+.input-container,
+.message-actions,
+.settings-actions {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Allow text selection in messages */
+.message-content {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Smooth scrolling on iOS */
+.messages,
+.chat-list,
+.modal-body {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Extra small screens (phones in portrait) */
+@media (max-width: 480px) {
+  .message {
+    padding: 12px;
+  }
+
+  .input-area {
+    padding: 8px;
+  }
+
+  .modal-content {
+    width: 100%;
+    height: 100%;
+    max-height: 100%;
+    margin: 0;
+    border-radius: 0;
+  }
+
+  .modal-body {
+    max-height: calc(100vh - 60px);
+  }
+
+  /* Smaller code blocks */
+  .code-block pre {
+    padding: 10px;
+    font-size: 12px;
+  }
+
+  /* Compact header */
+  .header {
+    padding: 10px 12px;
+  }
+
+  .title {
+    font-size: 16px;
+  }
+
+  /* Stack setup steps */
+  .setup-step-content {
+    padding-left: 0;
+    margin-top: 12px;
+  }
+
+  .ask-openclaw-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .ask-phrase {
+    width: 100%;
+    text-align: center;
   }
 }
 
