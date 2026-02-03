@@ -37,12 +37,15 @@ body {
   background: var(--bg-primary);
   color: var(--text-primary);
   height: 100vh;
+  height: 100dvh; /* Dynamic viewport height - adjusts when mobile keyboard opens */
   overflow: hidden;
+  font-size: 16px;
 }
 
 .app {
   display: flex;
   height: 100vh;
+  height: 100dvh;
 }
 
 /* Sidebar */
@@ -461,6 +464,9 @@ body {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  height: 100%;
+  max-height: 100dvh;
+  overflow: hidden;
 }
 
 .header {
@@ -537,7 +543,7 @@ body {
 }
 
 .message {
-  padding: 24px;
+  padding: 16px;
   max-width: 768px;
   margin: 0 auto;
 }
@@ -649,8 +655,8 @@ body {
 }
 
 .message-content {
-  font-size: 15px;
-  line-height: 1.7;
+  font-size: 16px;
+  line-height: 1.8;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -820,7 +826,9 @@ body {
 /* Input area */
 .input-area {
   padding: 16px 24px 24px;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
   background: var(--bg-primary);
+  flex-shrink: 0; /* Don't compress input area */
 }
 
 .input-container {
@@ -1855,18 +1863,130 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Responsive */
+/* Responsive - Tablets and Mobile */
 @media (max-width: 768px) {
+  body {
+    font-size: 18px;
+  }
+
+  /* App layout - ensure main takes full width when sidebar hidden */
+  .app {
+    position: relative;
+  }
+
   .sidebar {
-    position: absolute;
-    z-index: 100;
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 1000;
     height: 100%;
+    width: 85%;
+    max-width: 320px;
     transform: translateX(-100%);
-    width: 280px;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
   }
 
   .sidebar.open {
     transform: translateX(0);
+  }
+  
+  /* On mobile, never show collapsed state - always full width when open */
+  .sidebar.collapsed {
+    width: 85%;
+    max-width: 320px;
+  }
+  
+  /* Force all collapsed-hidden elements to show on mobile */
+  .sidebar.collapsed .sidebar-search,
+  .sidebar.collapsed .section-header,
+  .sidebar.collapsed .btn-text,
+  .sidebar.collapsed .expand-pinned-btn,
+  .sidebar.collapsed .chat-list {
+    display: block;
+  }
+  
+  .sidebar.collapsed .search-btn-collapsed {
+    display: none;
+  }
+  
+  .sidebar.collapsed .new-chat-btn {
+    padding: 12px 16px;
+    justify-content: flex-start;
+  }
+  
+  .sidebar.collapsed .settings-btn,
+  .sidebar.collapsed .help-btn {
+    padding: 12px 16px;
+    justify-content: flex-start;
+    flex: 0;
+  }
+  
+  .sidebar.collapsed .sidebar-footer {
+    flex-direction: row;
+    gap: 8px;
+  }
+  
+  .sidebar.collapsed .collapse-btn svg {
+    transform: none;
+  }
+  
+  /* Move collapse button to top of sidebar on mobile */
+  .sidebar .sidebar-header {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .sidebar .mobile-close-btn {
+    display: flex;
+    width: 100%;
+    padding: 12px 16px;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+    transition: background 0.2s;
+    order: -1; /* Put it first */
+  }
+  
+  .sidebar .mobile-close-btn:hover {
+    background: var(--bg-tertiary);
+  }
+  
+  .sidebar .mobile-close-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+  
+  /* Hide footer collapse button on mobile (we use the top one) */
+  .sidebar .collapse-btn {
+    display: none;
+  }
+
+  /* Overlay when sidebar is open */
+  .sidebar-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+  }
+
+  .sidebar-overlay.active {
+    display: block;
+  }
+
+  /* Main content takes full width */
+  .main {
+    width: 100%;
+    margin-left: 0 !important;
   }
 
   .menu-btn {
@@ -1895,13 +2015,16 @@ body {
   .stop-btn,
   .attach-btn,
   .voice-btn {
-    min-width: 44px;
-    min-height: 44px;
+    min-width: 48px;
+    min-height: 48px;
   }
 
-  /* Input area optimization */
+  /* Input area - fixed at bottom */
   .input-area {
     padding: 12px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    background: var(--bg-primary);
+    border-top: 1px solid var(--border-color);
   }
 
   .input-container {
@@ -1909,18 +2032,28 @@ body {
   }
 
   #messageInput {
-    font-size: 16px; /* Prevents iOS zoom on focus */
+    font-size: 16px !important; /* 16px prevents iOS zoom */
     padding: 12px;
+    min-height: 48px;
   }
 
-  /* Messages */
+  /* Messages - leave room for fixed input */
   .messages {
     padding: 12px;
+    padding-bottom: 20px;
   }
 
   .message-content {
+    font-size: 17px !important;
+    line-height: 1.7 !important;
+  }
+  
+  .message-role {
+    font-size: 15px !important;
+  }
+  
+  .message-header {
     font-size: 15px;
-    line-height: 1.5;
   }
 
   .code-block {
@@ -1929,6 +2062,7 @@ body {
 
   .code-block pre {
     padding: 12px;
+    overflow-x: auto;
   }
 
   /* Welcome screen */
@@ -1937,7 +2071,7 @@ body {
   }
 
   .welcome p {
-    font-size: 14px;
+    font-size: 16px;
   }
 
   /* Modals - full screen on mobile */
@@ -1975,39 +2109,42 @@ body {
   /* Chat list items - larger touch targets */
   .chat-item {
     padding: 14px 16px;
+    font-size: 16px;
   }
 
-  /* Action buttons on messages */
+  /* Action buttons on messages - always visible on touch */
   .message-actions {
-    opacity: 1; /* Always visible on mobile */
+    opacity: 1;
   }
 
-  .message-action-btn {
-    min-width: 36px;
+  .msg-action-btn {
+    min-width: 40px;
     min-height: 36px;
     padding: 8px;
   }
 
   /* Status indicator */
   .status {
-    font-size: 11px;
+    font-size: 13px;
     padding: 4px 8px;
+  }
+  
+  .chat-item {
+    font-size: 16px;
+  }
+  
+  .new-chat-btn {
+    font-size: 16px;
   }
 }
 
-/* Safe area for notched phones */
-@supports (padding: env(safe-area-inset-bottom)) {
-  .input-area {
-    padding-bottom: calc(12px + env(safe-area-inset-bottom));
-  }
+/* Safe area padding is handled in base .input-area and responsive media queries */
+.sidebar {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
 
-  .sidebar {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-
-  .toast {
-    bottom: calc(24px + env(safe-area-inset-bottom));
-  }
+.toast {
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
 }
 
 /* Disable text selection on UI elements for cleaner mobile experience */
@@ -2033,14 +2170,37 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
-/* Extra small screens (phones in portrait) */
+/* Small phones and folded foldables (Samsung Fold outer screen ~280px) */
 @media (max-width: 480px) {
+  body {
+    font-size: 17px;
+  }
+
   .message {
-    padding: 12px;
+    padding: 12px 10px;
+  }
+
+  /* Larger, more readable text on small screens */
+  .message-content {
+    font-size: 16px !important;
+    line-height: 1.6 !important;
+    word-break: break-word;
   }
 
   .input-area {
-    padding: 8px;
+    padding: 10px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .input-container {
+    padding: 10px 12px;
+    gap: 6px;
+  }
+
+  #messageInput {
+    font-size: 16px !important;
+    min-height: 44px;
+    padding: 10px 8px;
   }
 
   .modal-content {
@@ -2053,9 +2213,10 @@ body {
 
   .modal-body {
     max-height: calc(100vh - 60px);
+    padding: 16px;
   }
 
-  /* Smaller code blocks */
+  /* Code blocks */
   .code-block pre {
     padding: 10px;
     font-size: 12px;
@@ -2085,6 +2246,72 @@ body {
   .ask-phrase {
     width: 100%;
     text-align: center;
+  }
+
+  /* Sidebar narrower on small screens */
+  .sidebar {
+    width: 90%;
+    max-width: 280px;
+  }
+  
+  /* Welcome */
+  .welcome h2 {
+    font-size: 22px;
+  }
+  
+  .welcome p {
+    font-size: 14px;
+    padding: 0 16px;
+  }
+
+  /* Touch-friendly buttons */
+  .send-btn,
+  .stop-btn {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 10px;
+  }
+
+  .attach-btn,
+  .voice-btn {
+    min-width: 40px;
+    min-height: 40px;
+    padding: 8px;
+  }
+}
+
+/* Very narrow screens (folded foldables, small phones) */
+@media (max-width: 320px) {
+  .message-content {
+    font-size: 15px !important;
+    line-height: 1.5 !important;
+  }
+
+  .header {
+    padding: 8px 10px;
+  }
+
+  .title {
+    font-size: 15px;
+  }
+
+  .menu-btn {
+    padding: 6px;
+  }
+
+  .status {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+
+  .input-container {
+    padding: 8px 10px;
+  }
+
+  /* Hide less essential buttons on very small screens */
+  .attach-btn,
+  .voice-btn {
+    display: none;
   }
 }
 
@@ -2265,6 +2492,11 @@ body {
 
 .sidebar.collapsed .sidebar-header {
   padding: 8px;
+}
+
+/* Mobile close button - hidden on desktop */
+.mobile-close-btn {
+  display: none;
 }
 
 /* Smooth width transition */

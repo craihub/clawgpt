@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com;
@@ -19,9 +19,19 @@
 </head>
 <body>
   <div class="app">
+    <!-- Sidebar overlay for mobile -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+    
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
+        <button class="mobile-close-btn" id="mobileCloseBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+          <span>Close menu</span>
+        </button>
         <button class="new-chat-btn" id="newChatBtn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -107,7 +117,7 @@
           <input type="file" id="fileInput" accept="image/*,.txt,.md,.json,.js,.ts,.py,.html,.css,.xml,.yaml,.yml,.csv,.log,.sh,.bash,.zsh,.env,.ini,.conf,.cfg,.pdf,.xlsx,.xls" multiple style="display: none;">
           <textarea 
             id="messageInput" 
-            placeholder="Message ClawGPT..."
+            placeholder="Message"
             rows="1"
           ></textarea>
           <button class="voice-btn" id="voiceBtn" title="Voice input">
