@@ -226,6 +226,11 @@ clawgpt/
 1. In old browser: Settings → Export Chats
 2. In new browser: Settings → Import Chats
 
+**Mobile not connecting?**
+- Use **Chrome** on mobile — works best with local network connections
+- Brave/Firefox may block local WebSocket connections for security reasons
+- Make sure your phone is on the same WiFi network as your computer
+
 ## 🤝 Contributing
 
 PRs welcome! Ideas for contribution:

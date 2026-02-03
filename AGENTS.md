@@ -114,6 +114,8 @@ When the user asks for mobile access to ClawGPT:
    
    ⚠️ Remind them: "Don't share the QR code — it contains your auth token."
 
+   **Browser compatibility:** Chrome mobile works best. Brave/Firefox may block local WebSocket connections for security reasons. If it doesn't connect, try Chrome.
+
 ### Remote access (away from home)
 
 1. **Check if Tailscale is installed:**
