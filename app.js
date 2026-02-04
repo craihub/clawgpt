@@ -2148,9 +2148,15 @@ window.CLAWGPT_CONFIG = {
               this.relayRole = msg.role;
               resolve(msg.roomId);
               
-              // If client is already connected, we'll get key exchange soon
+              // If client is already connected, initiate key exchange immediately
               if (msg.clientConnected) {
-                console.log('Client already connected, waiting for key exchange...');
+                console.log('Client already connected, initiating key exchange...');
+                if (this.relayCrypto && this.relayWs?.readyState === WebSocket.OPEN) {
+                  this.relayWs.send(JSON.stringify({
+                    type: 'keyexchange',
+                    publicKey: this.relayCrypto.getPublicKey()
+                  }));
+                }
               }
             } else if (msg.event === 'client.connected') {
               console.log('Mobile client connected via relay, initiating key exchange...');
