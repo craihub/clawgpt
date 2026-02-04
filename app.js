@@ -145,6 +145,237 @@ class ChatStorage {
   }
 }
 
+// ClawGPT Memory - File-based persistent storage for cross-device sync
+// This writes messages to files that can be accessed by external tools (like OpenClaw agents)
+class FileMemoryStorage {
+  constructor() {
+    this.dirHandle = null;
+    this.dbName = 'clawgpt-file-handles';
+    this.db = null;
+    this.enabled = false;
+    this.pendingWrites = [];
+    this.writeDebounce = null;
+  }
+
+  async init() {
+    // Check if File System Access API is available
+    if (!('showDirectoryPicker' in window)) {
+      console.log('FileMemoryStorage: File System Access API not available');
+      return false;
+    }
+
+    // Try to restore saved directory handle
+    await this.initDB();
+    const restored = await this.restoreHandle();
+    if (restored) {
+      this.enabled = true;
+      console.log('FileMemoryStorage: Restored saved directory handle');
+    }
+    return this.enabled;
+  }
+
+  async initDB() {
+    return new Promise((resolve) => {
+      const request = indexedDB.open(this.dbName, 1);
+      request.onerror = () => resolve(null);
+      request.onsuccess = (e) => {
+        this.db = e.target.result;
+        resolve(this.db);
+      };
+      request.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('handles')) {
+          db.createObjectStore('handles', { keyPath: 'id' });
+        }
+      };
+    });
+  }
+
+  async restoreHandle() {
+    if (!this.db) return false;
+
+    return new Promise(async (resolve) => {
+      try {
+        const tx = this.db.transaction(['handles'], 'readonly');
+        const store = tx.objectStore('handles');
+        const req = store.get('memoryDir');
+        
+        req.onsuccess = async () => {
+          if (req.result?.handle) {
+            // Verify we still have permission
+            const permission = await req.result.handle.queryPermission({ mode: 'readwrite' });
+            if (permission === 'granted') {
+              this.dirHandle = req.result.handle;
+              resolve(true);
+            } else {
+              // Try to request permission
+              const newPermission = await req.result.handle.requestPermission({ mode: 'readwrite' });
+              if (newPermission === 'granted') {
+                this.dirHandle = req.result.handle;
+                resolve(true);
+              } else {
+                resolve(false);
+              }
+            }
+          } else {
+            resolve(false);
+          }
+        };
+        req.onerror = () => resolve(false);
+      } catch (e) {
+        console.warn('FileMemoryStorage: Error restoring handle:', e);
+        resolve(false);
+      }
+    });
+  }
+
+  async selectDirectory() {
+    try {
+      this.dirHandle = await window.showDirectoryPicker({
+        id: 'clawgpt-memory',
+        mode: 'readwrite',
+        startIn: 'documents'
+      });
+
+      // Save handle for persistence
+      if (this.db) {
+        const tx = this.db.transaction(['handles'], 'readwrite');
+        tx.objectStore('handles').put({ id: 'memoryDir', handle: this.dirHandle });
+      }
+
+      this.enabled = true;
+      console.log('FileMemoryStorage: Directory selected:', this.dirHandle.name);
+      return true;
+    } catch (e) {
+      if (e.name !== 'AbortError') {
+        console.error('FileMemoryStorage: Error selecting directory:', e);
+      }
+      return false;
+    }
+  }
+
+  async writeMessage(message) {
+    if (!this.enabled || !this.dirHandle) return;
+
+    this.pendingWrites.push(message);
+    
+    // Debounce writes to batch them
+    if (this.writeDebounce) clearTimeout(this.writeDebounce);
+    this.writeDebounce = setTimeout(() => this.flushWrites(), 1000);
+  }
+
+  async flushWrites() {
+    if (!this.enabled || !this.dirHandle || this.pendingWrites.length === 0) return;
+
+    const toWrite = [...this.pendingWrites];
+    this.pendingWrites = [];
+
+    try {
+      // Group messages by date
+      const byDate = {};
+      for (const msg of toWrite) {
+        const date = new Date(msg.timestamp).toISOString().split('T')[0];
+        if (!byDate[date]) byDate[date] = [];
+        byDate[date].push(msg);
+      }
+
+      // Write to date-based files
+      for (const [date, messages] of Object.entries(byDate)) {
+        await this.appendToDateFile(date, messages);
+      }
+    } catch (e) {
+      console.error('FileMemoryStorage: Error writing messages:', e);
+      // Put messages back in queue
+      this.pendingWrites = [...toWrite, ...this.pendingWrites];
+    }
+  }
+
+  async appendToDateFile(date, messages) {
+    const filename = `${date}.jsonl`;
+    
+    try {
+      // Get or create file
+      const fileHandle = await this.dirHandle.getFileHandle(filename, { create: true });
+      
+      // Read existing content
+      const file = await fileHandle.getFile();
+      const existingContent = await file.text();
+      
+      // Load existing message IDs to avoid duplicates
+      const existingIds = new Set();
+      if (existingContent) {
+        for (const line of existingContent.split('\n')) {
+          if (line.trim()) {
+            try {
+              const msg = JSON.parse(line);
+              if (msg.id) existingIds.add(msg.id);
+            } catch {}
+          }
+        }
+      }
+      
+      // Filter out duplicates and append new messages
+      const newMessages = messages.filter(m => !existingIds.has(m.id));
+      if (newMessages.length === 0) return;
+      
+      const newLines = newMessages.map(m => JSON.stringify(m)).join('\n') + '\n';
+      
+      // Write back
+      const writable = await fileHandle.createWritable({ keepExistingData: true });
+      await writable.seek((await file.size));
+      await writable.write(newLines);
+      await writable.close();
+      
+      console.log(`FileMemoryStorage: Wrote ${newMessages.length} messages to ${filename}`);
+    } catch (e) {
+      console.error(`FileMemoryStorage: Error writing to ${filename}:`, e);
+      throw e;
+    }
+  }
+
+  async writeChat(chat) {
+    if (!this.enabled || !this.dirHandle || !chat.messages) return;
+
+    // Write each message with chat context
+    for (let i = 0; i < chat.messages.length; i++) {
+      const msg = chat.messages[i];
+      await this.writeMessage({
+        id: `${chat.id}-${i}`,
+        chatId: chat.id,
+        chatTitle: chat.title || 'Untitled',
+        order: i,
+        role: msg.role,
+        content: msg.content || '',
+        timestamp: msg.timestamp || chat.createdAt || Date.now()
+      });
+    }
+  }
+
+  async syncAllChats(chats) {
+    if (!this.enabled || !this.dirHandle) return 0;
+
+    let count = 0;
+    for (const chat of Object.values(chats)) {
+      if (chat.messages) {
+        await this.writeChat(chat);
+        count += chat.messages.length;
+      }
+    }
+    
+    // Force flush
+    await this.flushWrites();
+    return count;
+  }
+
+  isEnabled() {
+    return this.enabled;
+  }
+
+  getDirectoryName() {
+    return this.dirHandle?.name || null;
+  }
+}
+
 // ClawGPT Memory - Per-message storage for better search
 class MemoryStorage {
   constructor() {
@@ -423,6 +654,7 @@ class ClawGPT {
     this.pinnedExpanded = false;
     this.storage = new ChatStorage();
     this.memoryStorage = new MemoryStorage();
+    this.fileMemoryStorage = new FileMemoryStorage();
 
     this.loadSettings();
     this.initUI();
@@ -437,6 +669,9 @@ class ClawGPT {
     
     // Sync existing chats to clawgpt-memory (background)
     this.syncMemoryStorage();
+    
+    // Initialize file-based memory storage (for cross-device sync)
+    await this.initFileMemoryStorage();
     
     // Check if joining relay as client (phone scanned QR)
     if (this.pendingRelayJoin) {
@@ -651,6 +886,73 @@ class ClawGPT {
       console.warn('Memory search failed:', err);
       return [];
     }
+  }
+  
+  // Initialize file-based memory storage for cross-device persistence
+  async initFileMemoryStorage() {
+    const initialized = await this.fileMemoryStorage.init();
+    
+    if (initialized) {
+      console.log('File memory storage ready:', this.fileMemoryStorage.getDirectoryName());
+      this.updateFileMemoryUI();
+      
+      // Sync all existing chats to file storage
+      const count = await this.fileMemoryStorage.syncAllChats(this.chats);
+      if (count > 0) {
+        console.log(`File memory: synced ${count} messages to disk`);
+      }
+    } else {
+      console.log('File memory storage not enabled (select folder in settings)');
+    }
+  }
+  
+  // Enable file memory storage (user selects directory)
+  async enableFileMemoryStorage() {
+    const success = await this.fileMemoryStorage.selectDirectory();
+    
+    if (success) {
+      this.showToast(`Memory folder: ${this.fileMemoryStorage.getDirectoryName()}`);
+      this.updateFileMemoryUI();
+      
+      // Sync all chats to the new folder
+      const count = await this.fileMemoryStorage.syncAllChats(this.chats);
+      this.showToast(`Synced ${count} messages to disk`);
+    }
+    
+    return success;
+  }
+  
+  // Update file memory UI elements
+  updateFileMemoryUI() {
+    const statusEl = document.getElementById('fileMemoryStatus');
+    const enableBtn = document.getElementById('enableFileMemoryBtn');
+    const syncBtn = document.getElementById('syncFileMemoryBtn');
+    
+    if (this.fileMemoryStorage.isEnabled()) {
+      if (statusEl) {
+        statusEl.innerHTML = `<span style="color: var(--accent-color);">✓</span> ${this.fileMemoryStorage.getDirectoryName()}`;
+      }
+      if (enableBtn) enableBtn.textContent = 'Change Folder';
+      if (syncBtn) syncBtn.style.display = 'inline-block';
+    } else {
+      if (statusEl) {
+        statusEl.innerHTML = '<span style="color: var(--text-muted);">Not configured</span>';
+      }
+      if (enableBtn) enableBtn.textContent = 'Select Folder';
+      if (syncBtn) syncBtn.style.display = 'none';
+    }
+  }
+  
+  // Manual sync to file memory
+  async syncToFileMemory() {
+    if (!this.fileMemoryStorage.isEnabled()) {
+      this.showToast('Select a folder first', true);
+      return;
+    }
+    
+    this.showToast('Syncing...');
+    const count = await this.fileMemoryStorage.syncAllChats(this.chats);
+    this.showToast(`Synced ${count} messages to disk`);
   }
   
   // Setup Wizard
@@ -1018,6 +1320,16 @@ window.CLAWGPT_CONFIG = {
     this.storage.saveAll(this.chats).catch(err => {
       console.error('Failed to save chats:', err);
     });
+    
+    // Write to file-based memory storage if enabled
+    if (broadcastChatId && this.fileMemoryStorage.isEnabled()) {
+      const chat = this.chats[broadcastChatId];
+      if (chat) {
+        this.fileMemoryStorage.writeChat(chat).catch(err => {
+          console.error('Failed to write to file memory:', err);
+        });
+      }
+    }
     
     // Broadcast to connected peer if relay is active
     if (broadcastChatId && this.relayEncrypted) {
@@ -1657,6 +1969,17 @@ window.CLAWGPT_CONFIG = {
       this.saveChats();
       this.renderChatList();
       
+      // Write synced chats to file memory
+      if (this.fileMemoryStorage.isEnabled()) {
+        for (const [id, chat] of Object.entries(incomingChats)) {
+          if (this.chats[id] === chat) { // Only write if we actually merged it
+            this.fileMemoryStorage.writeChat(chat).catch(err => {
+              console.warn('Failed to write synced chat to file:', err);
+            });
+          }
+        }
+      }
+      
       // Refresh current chat if it was updated
       if (this.currentChatId && incomingChats[this.currentChatId]) {
         this.renderMessages();
@@ -1681,6 +2004,13 @@ window.CLAWGPT_CONFIG = {
       this.chats[chat.id] = chat;
       this.saveChats();
       this.renderChatList();
+      
+      // Write to file memory
+      if (this.fileMemoryStorage.isEnabled()) {
+        this.fileMemoryStorage.writeChat(chat).catch(err => {
+          console.warn('Failed to write chat update to file:', err);
+        });
+      }
       
       if (this.currentChatId === chat.id) {
         this.renderMessages();
@@ -1921,6 +2251,17 @@ window.CLAWGPT_CONFIG = {
           e.target.value = ''; // Reset so same file can be imported again
         }
       });
+    }
+    
+    // File memory storage buttons
+    const enableFileMemoryBtn = document.getElementById('enableFileMemoryBtn');
+    const syncFileMemoryBtn = document.getElementById('syncFileMemoryBtn');
+    
+    if (enableFileMemoryBtn) {
+      enableFileMemoryBtn.addEventListener('click', () => this.enableFileMemoryStorage());
+    }
+    if (syncFileMemoryBtn) {
+      syncFileMemoryBtn.addEventListener('click', () => this.syncToFileMemory());
     }
     
     // QR Code for mobile access
@@ -2206,6 +2547,7 @@ window.CLAWGPT_CONFIG = {
     this.elements.settingsModal.classList.add('open');
     this.updateSettingsButtons();
     this.updateSettingsForConfigMode();
+    this.updateFileMemoryUI();
   }
   
   updateSettingsForConfigMode() {
