@@ -60,6 +60,13 @@
 - [x] **Import chats** — Restore or merge chats from backup file
 - [x] **Auto-migration** — Seamlessly migrates from localStorage if upgrading
 
+### Cross-Device Memory (clawgpt-memory)
+- [x] **Automatic sync** — Messages sync between desktop and mobile in real-time
+- [x] **File-based storage** — Conversations saved to `clawgpt-memory/` folder
+- [x] **AI-accessible** — Your OpenClaw agent can read your ClawGPT history
+- [x] **Works offline** — Syncs when devices reconnect via relay
+- [x] **JSONL format** — Human-readable, easy to search and backup
+
 ## 🔒 Security
 
 ### Local Mode
@@ -181,6 +188,77 @@ window.CLAWGPT_CONFIG = {
 Any browser opening ClawGPT will auto-connect using this config. The file is gitignored so your token won't be committed.
 
 > ⚠️ **Security**: Only use config.js on localhost. If exposed to a network, anyone can view your token in the source.
+
+## 🧠 Cross-Device Memory
+
+ClawGPT's killer feature: **clawgpt-memory** — a file-based conversation store that syncs across all your devices and is readable by your OpenClaw agent.
+
+### How It Works
+
+```
+┌─────────────┐                        ┌─────────────┐
+│   Mobile    │◄──── Relay Sync ──────►│   Desktop   │
+│  (Android)  │    (E2E Encrypted)     │   (Web)     │
+└─────────────┘                        └──────┬──────┘
+                                              │
+                                              ▼
+                                    ┌─────────────────┐
+                                    │ clawgpt-memory/ │
+                                    │  2026-02-04.jsonl│
+                                    │  2026-02-05.jsonl│
+                                    └────────┬────────┘
+                                              │
+                                              ▼
+                                    ┌─────────────────┐
+                                    │  OpenClaw Agent │
+                                    │  (can read all  │
+                                    │   your chats!)  │
+                                    └─────────────────┘
+```
+
+### Setup
+
+On first run, ClawGPT will ask you to select a folder for `clawgpt-memory`. 
+
+**Recommended:** Create a folder called `clawgpt-memory` in your ClawGPT directory:
+```
+clawgpt/
+├── clawgpt-memory/    ← Your synced conversations
+│   ├── 2026-02-04.jsonl
+│   └── 2026-02-05.jsonl
+├── index.html
+├── app.js
+└── ...
+```
+
+You can also set this up later in **Settings → Cross-Device Memory**.
+
+### File Format
+
+Messages are stored as JSONL (one JSON object per line):
+
+```json
+{"id":"abc-0","chatId":"abc","chatTitle":"Hello","role":"user","content":"Hi!","timestamp":1707012345678}
+{"id":"abc-1","chatId":"abc","chatTitle":"Hello","role":"assistant","content":"Hello!","timestamp":1707012346000}
+```
+
+### Why This Matters
+
+1. **Your OpenClaw agent can read your history** — Ask "what did we talk about last week?" and your agent can search your ClawGPT conversations
+2. **True cross-device sync** — Start a chat on your phone, continue on desktop
+3. **Your data, your files** — Plain text files you can backup, search, or process however you want
+4. **Works offline** — Syncs when devices reconnect
+
+### For OpenClaw Agents
+
+Add this to your agent's memory search paths to access ClawGPT conversations:
+```yaml
+memorySearch:
+  extraPaths:
+    - ~/clawgpt/clawgpt-memory/
+```
+
+Now your agent can search across both OpenClaw memory AND your ClawGPT chat history.
 
 ## 🔧 How It Works
 

@@ -147,6 +147,7 @@ class ChatStorage {
 
 // ClawGPT Memory - File-based persistent storage for cross-device sync
 // This writes messages to files that can be accessed by external tools (like OpenClaw agents)
+// Default folder: clawgpt-memory/ in the app directory
 class FileMemoryStorage {
   constructor() {
     this.dirHandle = null;
@@ -155,6 +156,7 @@ class FileMemoryStorage {
     this.enabled = false;
     this.pendingWrites = [];
     this.writeDebounce = null;
+    this.defaultFolderName = 'clawgpt-memory';
   }
 
   async init() {
@@ -172,6 +174,19 @@ class FileMemoryStorage {
       console.log('FileMemoryStorage: Restored saved directory handle');
     }
     return this.enabled;
+  }
+  
+  // Auto-setup: prompt user to select the clawgpt-memory folder on first run
+  async autoSetup() {
+    if (this.enabled) return true; // Already set up
+    
+    // Check if File System Access API is available
+    if (!('showDirectoryPicker' in window)) {
+      console.log('FileMemoryStorage: Auto-setup skipped (API not available)');
+      return false;
+    }
+    
+    return await this.selectDirectory(true);
   }
 
   async initDB() {
@@ -229,13 +244,22 @@ class FileMemoryStorage {
     });
   }
 
-  async selectDirectory() {
+  async selectDirectory(isAutoSetup = false) {
     try {
-      this.dirHandle = await window.showDirectoryPicker({
+      // For auto-setup, try to guide user to create/select clawgpt-memory folder
+      const options = {
         id: 'clawgpt-memory',
-        mode: 'readwrite',
-        startIn: 'documents'
-      });
+        mode: 'readwrite'
+      };
+      
+      // Start in the directory where ClawGPT is running if possible
+      // This helps users find/create the clawgpt-memory folder in the right place
+      if (isAutoSetup) {
+        // Try to start in downloads or documents as fallback
+        options.startIn = 'downloads';
+      }
+      
+      this.dirHandle = await window.showDirectoryPicker(options);
 
       // Save handle for persistence
       if (this.db) {
@@ -902,8 +926,37 @@ class ClawGPT {
         console.log(`File memory: synced ${count} messages to disk`);
       }
     } else {
-      console.log('File memory storage not enabled (select folder in settings)');
+      // Check if this is first run and we should auto-setup
+      const hasAskedForMemory = localStorage.getItem('clawgpt-memory-asked');
+      if (!hasAskedForMemory && 'showDirectoryPicker' in window) {
+        // Prompt user to set up clawgpt-memory folder
+        this.promptFileMemorySetup();
+      } else {
+        console.log('File memory storage not enabled (select folder in settings)');
+      }
     }
+  }
+  
+  // Prompt user to set up file memory on first run
+  async promptFileMemorySetup() {
+    // Mark that we've asked (so we don't ask again)
+    localStorage.setItem('clawgpt-memory-asked', 'true');
+    
+    // Show a toast explaining the feature
+    this.showToast('Tip: Set up cross-device memory in Settings', 5000);
+    
+    // Auto-open settings after a short delay on first run
+    setTimeout(() => {
+      const shouldSetup = confirm(
+        'ClawGPT can sync your conversations across devices.\n\n' +
+        'To enable this, select a folder called "clawgpt-memory" in your ClawGPT directory.\n\n' +
+        'Set up now?'
+      );
+      
+      if (shouldSetup) {
+        this.enableFileMemoryStorage();
+      }
+    }, 2000);
   }
   
   // Enable file memory storage (user selects directory)
