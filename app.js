@@ -1613,7 +1613,15 @@ window.CLAWGPT_CONFIG = {
                 console.log('Client already connected, waiting for key exchange...');
               }
             } else if (msg.event === 'client.connected') {
-              console.log('Mobile client connected via relay, waiting for key exchange...');
+              console.log('Mobile client connected via relay, initiating key exchange...');
+              // Send our public key to initiate key exchange
+              // This handles both fresh QR scans and reconnects
+              if (this.relayCrypto && this.relayWs?.readyState === WebSocket.OPEN) {
+                this.relayWs.send(JSON.stringify({
+                  type: 'keyexchange',
+                  publicKey: this.relayCrypto.getPublicKey()
+                }));
+              }
             } else if (msg.event === 'host.connected') {
               console.log('Host reconnected');
             } else if (msg.event === 'client.disconnected') {
