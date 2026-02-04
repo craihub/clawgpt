@@ -6223,8 +6223,9 @@ Example: [0, 2, 5]`;
     this.elements.messages.scrollTop = this.elements.messages.scrollHeight;
   }
 
-  async sendMessage() {
-    const text = this.elements.messageInput.value.trim();
+  async sendMessage(textOverride = null) {
+    // Allow passing text directly (for relay messages) or read from input
+    const text = textOverride !== null ? textOverride : this.elements.messageInput.value.trim();
     const hasImages = this.pendingImages && this.pendingImages.length > 0;
     const hasTextFiles = this.pendingTextFiles && this.pendingTextFiles.length > 0;
     
