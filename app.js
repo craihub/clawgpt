@@ -2965,7 +2965,7 @@ window.CLAWGPT_CONFIG = {
     this.currentChatId = chatId;
     this.saveChats();
     this.renderChatList();
-    this.renderChat();
+    this.renderMessages();
     
     // Send to gateway
     this.sendMessage(content);
