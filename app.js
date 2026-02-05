@@ -6611,7 +6611,10 @@ Example: [0, 2, 5]`;
       return;
     }
 
-    if (payload.sessionKey && payload.sessionKey !== this.sessionKey) {
+    // Check if this event is for our session (handle both short and full session keys)
+    if (payload.sessionKey && 
+        payload.sessionKey !== this.sessionKey && 
+        !payload.sessionKey.endsWith(':' + this.sessionKey)) {
       console.log('Ignoring event for different session:', payload.sessionKey, 'vs', this.sessionKey);
       return; // Different session
     }
