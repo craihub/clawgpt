@@ -976,6 +976,7 @@ class ClawGPT {
     this.connected = false;
     this.sessionKey = 'main';
     this.currentChatId = null;
+    this.lastGatewayChat = null; // Track which chat's context is in gateway
     this.chats = {};
     this.pendingRequests = new Map();
     this.requestId = 0;
@@ -4435,7 +4436,14 @@ Example: [0, 2, 5]`;
     // Get settings from UI
     this.gatewayUrl = this.elements.gatewayUrl.value.trim() || 'ws://127.0.0.1:18789';
     this.authToken = this.elements.authToken.value.trim();
-    this.sessionKey = this.elements.sessionKeyInput.value.trim() || 'main';
+    // Only update sessionKey from UI if user actually entered something
+    // Otherwise keep the value from config.js
+    const uiSessionKey = this.elements.sessionKeyInput?.value?.trim();
+    if (uiSessionKey) {
+      this.sessionKey = uiSessionKey;
+    } else if (!this.sessionKey) {
+      this.sessionKey = 'main';
+    }
     this.saveSettings();
 
     this.closeSettings();
@@ -4472,6 +4480,7 @@ Example: [0, 2, 5]`;
       this.ws.onclose = () => {
         console.log('WebSocket closed');
         this.connected = false;
+        this.lastGatewayChat = null; // Gateway context lost on disconnect
         // Don't overwrite status if we're connected via relay
         if (!this.relayEncrypted) {
           this.setStatus('Disconnected');
@@ -4725,6 +4734,15 @@ Example: [0, 2, 5]`;
       this.maybeGenerateSummary(this.currentChatId);
     }
     
+    // Clear gateway session to prevent context buildup
+    // This doesn't affect local chat storage - just the AI's working memory
+    if (this.connected && this.lastGatewayChat) {
+      this.sendForgetCommand().catch(err => 
+        console.warn('Failed to clear gateway session:', err)
+      );
+    }
+    this.lastGatewayChat = null;
+    
     this.currentChatId = null;
     this.elements.welcome.style.display = 'flex';
     this.renderMessages();
@@ -4732,6 +4750,45 @@ Example: [0, 2, 5]`;
     this.updateTokenDisplay();
     this.elements.messageInput.focus();
     this.elements.sidebar.classList.remove('open');
+  }
+  
+  // Send /forget command to clear gateway session context
+  async sendForgetCommand() {
+    if (!this.connected) return;
+    
+    try {
+      await this.request('chat.send', {
+        sessionKey: this.sessionKey,
+        message: '/forget',
+        deliver: false,
+        idempotencyKey: this.generateId()
+      });
+      console.log('Gateway session cleared with /forget');
+    } catch (error) {
+      console.warn('Failed to send /forget:', error);
+    }
+  }
+  
+  // Build context from chat history for gateway
+  buildChatContext(chat, maxMessages = 20) {
+    if (!chat || !chat.messages || chat.messages.length === 0) {
+      return null;
+    }
+    
+    // Get recent messages (limit to maxMessages)
+    const messages = chat.messages.slice(-maxMessages);
+    
+    // Format as conversation context
+    const contextLines = messages.map(msg => {
+      const role = msg.role === 'user' ? 'User' : 'Assistant';
+      // Truncate very long messages
+      const content = msg.content.length > 2000 
+        ? msg.content.slice(0, 2000) + '...[truncated]'
+        : msg.content;
+      return `${role}: ${content}`;
+    });
+    
+    return contextLines.join('\n\n');
   }
 
   selectChat(chatId) {
@@ -6542,13 +6599,47 @@ Example: [0, 2, 5]`;
     this.renderMessages();
 
     try {
+      // Check if we're switching to a different chat
+      const switchingChats = this.lastGatewayChat && this.lastGatewayChat !== this.currentChatId;
+      
+      // If switching chats, clear gateway and include context from this chat
+      if (switchingChats) {
+        console.log('Switching chats, clearing gateway and including context');
+        await this.sendForgetCommand();
+      }
+      
+      // Build the message with context if needed
+      let finalMessage = messageContent;
+      
+      // Include chat context if:
+      // 1. Switching to a different chat (gateway was just cleared)
+      // 2. Or this is the first message in this chat with gateway connected
+      const needsContext = switchingChats || !this.lastGatewayChat;
+      
+      if (needsContext && this.currentChatId) {
+        const chat = this.chats[this.currentChatId];
+        // Get messages BEFORE the one we just added
+        const historyMessages = chat.messages.slice(0, -1);
+        if (historyMessages.length > 0) {
+          const context = this.buildChatContext({ messages: historyMessages });
+          if (context) {
+            // Prepend conversation context
+            finalMessage = `[Previous conversation context]\n${context}\n\n[Current message]\n${messageContent}`;
+            console.log(`Including ${historyMessages.length} messages as context`);
+          }
+        }
+      }
+      
+      // Update tracking
+      this.lastGatewayChat = this.currentChatId;
+      
       // Track input tokens
-      this.addTokens(this.estimateTokens(messageContent || ''));
+      this.addTokens(this.estimateTokens(finalMessage || ''));
       
       // Build request params
       const params = {
         sessionKey: this.sessionKey,
-        message: messageContent,
+        message: finalMessage,
         deliver: false,
         idempotencyKey: this.generateId()
       };
@@ -6558,6 +6649,7 @@ Example: [0, 2, 5]`;
         params.attachments = attachments;
       }
       
+      console.log('Sending chat.send with params:', JSON.stringify(params));
       await this.request('chat.send', params);
       // Response will come via chat events
     } catch (error) {
