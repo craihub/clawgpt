@@ -6552,6 +6552,7 @@ Example: [0, 2, 5]`;
     // Note: We don't persist full image data to save storage
     // Just store filenames for reference
     const userMsg = {
+      id: 'msg-' + Date.now(),
       role: 'user',
       content: displayContent || '[File]',
       imageNames: images?.map(img => img.name || 'image') || [], // Store names only
