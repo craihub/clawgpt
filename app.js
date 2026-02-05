@@ -6531,6 +6531,7 @@ Example: [0, 2, 5]`;
     this.renderMessages();
 
     // Start streaming
+    console.log('Setting streaming = true before sending message');
     this.streaming = true;
     this.streamBuffer = '';
     this.updateStreamingUI();
@@ -6628,6 +6629,7 @@ Example: [0, 2, 5]`;
         }
       }
     } else if (state === 'final' || state === 'aborted' || state === 'error') {
+      console.log('End event received, streaming state:', this.streaming);
       if (!this.streaming) {
         console.log('Ignoring duplicate end event - not streaming');
         return;
