@@ -4454,7 +4454,11 @@ Example: [0, 2, 5]`;
       };
 
       this.ws.onmessage = (event) => {
-        this.handleMessage(JSON.parse(event.data));
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'event' && msg.event === 'chat') {
+          console.log('WS chat event:', msg.payload?.state, 'seq:', msg.payload?.seq);
+        }
+        this.handleMessage(msg);
       };
 
       this.ws.onerror = (error) => {
