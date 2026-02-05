@@ -2858,6 +2858,31 @@ window.CLAWGPT_CONFIG = {
   }
   
   handleChatUpdate(msg) {
+    // Handle incremental message updates (single message added)
+    if (msg.chatId && msg.message && !msg.chat) {
+      const chatId = msg.chatId;
+      if (!this.chats[chatId]) {
+        // Create chat if it doesn't exist yet
+        this.chats[chatId] = {
+          id: chatId,
+          title: msg.chatTitle || msg.message.content?.substring(0, 30) || 'New Chat',
+          messages: [],
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        };
+      }
+      this.chats[chatId].messages.push(msg.message);
+      this.chats[chatId].updatedAt = Date.now();
+      this.saveChats();
+      this.renderChatList();
+      if (this.currentChatId === chatId) {
+        this.renderMessages();
+      }
+      console.log(`[Sync] Incremental update for chat: ${this.chats[chatId].title}`);
+      return;
+    }
+    
+    // Handle full chat replacement (for renames, deletes, full-state sync, etc.)
     const chat = msg.chat;
     const theirDeviceId = msg.deviceId;
     
@@ -5261,6 +5286,7 @@ Example: [0, 2, 5]`;
         await new Promise(resolve => setTimeout(resolve, 500));
         
         switchedModel = model?.name || modelId;
+        this._userSelectedModel = true; // Don't override user's choice on reconnect
         console.log('Switched to model:', fullModelId);
       } catch (error) {
         console.error('Failed to set model:', error);
@@ -5334,6 +5360,22 @@ Example: [0, 2, 5]`;
         this.currentModelId = status.sessions.defaults.model;
         this.currentModelFamily = this.detectModelFamily(this.currentModelId);
         console.log('Current model:', this.currentModelId, 'Family:', this.currentModelFamily);
+      }
+      
+      // Set default conversational model if user hasn't explicitly chosen one
+      // claude-sonnet-4 is fast for conversation; user can switch via model selector
+      const preferredModel = 'anthropic/claude-sonnet-4-20250514';
+      if (!this._userSelectedModel && this.currentModelId !== 'claude-sonnet-4-20250514') {
+        console.log('Setting default conversation model:', preferredModel);
+        await this.request('chat.send', {
+          sessionKey: this.sessionKey,
+          message: `/model ${preferredModel}`,
+          deliver: false,
+          idempotencyKey: 'model-default-' + Date.now()
+        });
+        this.currentModelId = 'claude-sonnet-4-20250514';
+        this.currentModelFamily = 'claude';
+        console.log('Conversation model set to claude-sonnet-4');
       }
     } catch (error) {
       console.error('Failed to fetch models:', error);
@@ -6235,6 +6277,13 @@ Example: [0, 2, 5]`;
     // Need either text, images, or text files
     if (!text && !hasImages && !hasTextFiles) return;
     
+    // If already streaming, queue this message and wait for current to finish
+    if (this.streaming) {
+      console.log('Already streaming, queuing message');
+      this._pendingSend = { text, images: this.pendingImages, textFiles: this.pendingTextFiles };
+      return;
+    }
+    
     // If gateway is disconnected, try to reconnect
     if (!this.connected) {
       console.log('Gateway not connected, attempting reconnect...');
@@ -6345,7 +6394,17 @@ Example: [0, 2, 5]`;
     }
     this.chats[this.currentChatId].messages.push(userMsg);
     this.chats[this.currentChatId].updatedAt = Date.now();
-    this.saveChats(this.currentChatId);  // Broadcast to peer
+    this.saveChats(); // Save without broadcasting full chat
+    
+    // Send only the new message to phone (not entire chat)
+    if (this.relayEncrypted) {
+      this.sendRelayMessage({
+        type: 'chat-update',
+        chatId: this.currentChatId,
+        message: userMsg,
+        chatTitle: this.chats[this.currentChatId].title
+      });
+    }
     
     // Store in clawgpt-memory for search
     const chat = this.chats[this.currentChatId];
@@ -6473,6 +6532,15 @@ Example: [0, 2, 5]`;
       }
 
       this.streamBuffer = '';
+      
+      // Process queued message if any
+      if (this._pendingSend) {
+        const pending = this._pendingSend;
+        this._pendingSend = null;
+        console.log('Processing queued message');
+        // Small delay to let UI update before sending next
+        setTimeout(() => this.sendMessage(pending.text), 100);
+      }
     }
   }
 
@@ -6501,9 +6569,9 @@ Example: [0, 2, 5]`;
     };
     this.chats[this.currentChatId].messages.push(assistantMsg);
     this.chats[this.currentChatId].updatedAt = Date.now();
-    this.saveChats(this.currentChatId);
+    this.saveChats(); // Save without broadcasting full chat (incremental relay below)
     
-    // Broadcast to phone via relay
+    // Send only the new message to phone (not the entire chat)
     if (this.relayEncrypted) {
       this.sendRelayMessage({
         type: 'chat-update',
