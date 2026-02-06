@@ -2488,7 +2488,7 @@ window.CLAWGPT_CONFIG = {
 
     // Event listeners
     // Delegated click handlers (avoid inline onclick XSS)
-    this.elements.messagesContainer.addEventListener('click', (e) => {
+    this.elements.messages.addEventListener('click', (e) => {
       const img = e.target.closest('.clickable-img');
       if (img && img.src && img.src.startsWith('data:')) {
         window.open(img.src, '_blank');
