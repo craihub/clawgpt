@@ -552,7 +552,7 @@
     </div>
   </div>
 
-  <!-- Memory Setup Modal -->
+  <!-- Memory Setup Modal (Chrome) -->
   <div class="modal" id="memorySetupModal">
     <div class="modal-content" style="max-width: 400px;">
       <div class="modal-header">
@@ -566,6 +566,25 @@
         <div style="display: flex; gap: 10px; justify-content: center;">
           <button class="secondary-btn" id="memorySetupSkip">Later</button>
           <button class="primary-btn" id="memorySetupConfirm">Select Folder</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import Setup Modal (Firefox/Brave) -->
+  <div class="modal" id="importSetupModal">
+    <div class="modal-content" style="max-width: 400px;">
+      <div class="modal-header">
+        <h2>📥 Restore Your Chats</h2>
+      </div>
+      <div class="modal-body" style="text-align: center; padding: 20px;">
+        <p style="margin-bottom: 16px;">Have a ClawGPT backup? Import it to restore your chats.</p>
+        <p style="margin-bottom: 20px; color: var(--text-muted); font-size: 14px;">
+          Go to Settings → Import Chats
+        </p>
+        <div style="display: flex; gap: 10px; justify-content: center;">
+          <button class="secondary-btn" id="importSetupSkip">Later</button>
+          <button class="primary-btn" id="importSetupConfirm">Open Settings</button>
         </div>
       </div>
     </div>

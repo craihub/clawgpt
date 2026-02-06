@@ -1370,11 +1370,16 @@ class ClawGPT {
         console.log(`File memory: synced ${count} messages to disk`);
       }
     } else if (!this.isMobile) {
-      // Desktop only: prompt for folder selection on first run
-      // (Mobile auto-creates the folder, no prompt needed)
+      // Desktop only: prompt for folder selection or import on first run
       const hasAskedForMemory = localStorage.getItem('clawgpt-memory-asked');
-      if (!hasAskedForMemory && 'showDirectoryPicker' in window) {
-        this.promptFileMemorySetup();
+      if (!hasAskedForMemory) {
+        if ('showDirectoryPicker' in window) {
+          // Chrome: use folder sync
+          this.promptFileMemorySetup();
+        } else {
+          // Firefox/Brave: prompt for import instead
+          this.promptImportSetup();
+        }
       } else {
         console.log('File memory storage not enabled (select folder in settings)');
       }
@@ -1414,6 +1419,53 @@ class ClawGPT {
       };
       
       // Handle click outside
+      const handleOutside = (e) => {
+        if (e.target === modal) {
+          modal.classList.remove('open');
+          cleanup();
+        }
+      };
+      
+      const cleanup = () => {
+        confirmBtn.removeEventListener('click', handleConfirm);
+        skipBtn.removeEventListener('click', handleSkip);
+        modal.removeEventListener('click', handleOutside);
+      };
+      
+      confirmBtn.addEventListener('click', handleConfirm);
+      skipBtn.addEventListener('click', handleSkip);
+      modal.addEventListener('click', handleOutside);
+    }, 1000);
+  }
+  
+  // Prompt Firefox/Brave users to import chats (no folder sync available)
+  promptImportSetup() {
+    localStorage.setItem('clawgpt-memory-asked', 'true');
+    
+    const modal = document.getElementById('importSetupModal');
+    const confirmBtn = document.getElementById('importSetupConfirm');
+    const skipBtn = document.getElementById('importSetupSkip');
+    
+    if (!modal || !confirmBtn || !skipBtn) {
+      // Fallback to toast if modal not found
+      this.showToast('Tip: Import previous chats in Settings', 5000);
+      return;
+    }
+    
+    setTimeout(() => {
+      modal.classList.add('open');
+      
+      const handleConfirm = () => {
+        modal.classList.remove('open');
+        this.openSettings();
+        cleanup();
+      };
+      
+      const handleSkip = () => {
+        modal.classList.remove('open');
+        cleanup();
+      };
+      
       const handleOutside = (e) => {
         if (e.target === modal) {
           modal.classList.remove('open');
