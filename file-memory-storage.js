@@ -1,6 +1,8 @@
 // ClawGPT Memory - File-based persistent storage for cross-device sync
 // This writes messages to files that can be accessed by external tools (like OpenClaw agents)
 // Default folder: clawgpt-memory/ in the app directory
+// Supports optional encryption for sensitive chats
+
 class FileMemoryStorage {
   constructor() {
     this.dirHandle = null;
@@ -10,6 +12,10 @@ class FileMemoryStorage {
     this.pendingWrites = [];
     this.writeDebounce = null;
     this.defaultFolderName = 'clawgpt-memory';
+    
+    // Encryption support
+    this.crypto = null;
+    this.encryptionEnabled = false;
   }
 
   async init() {
@@ -28,7 +34,41 @@ class FileMemoryStorage {
     }
     return this.enabled;
   }
-  
+
+  // Enable encryption for file-based memory
+  async enableEncryption(password) {
+    this.crypto = new FileMemoryCrypto();
+    await this.crypto.init(password);
+    this.encryptionEnabled = true;
+    localStorage.setItem('clawgpt-filememory-encrypted', 'true');
+    return true;
+  }
+
+  // Initialize encryption with existing password
+  async unlockEncryption(password) {
+    if (!this.isEncrypted()) return true;
+
+    this.crypto = new FileMemoryCrypto();
+    const valid = await this.crypto.verifyPassword(password);
+    if (!valid) {
+      this.crypto = null;
+      return false;
+    }
+    await this.crypto.init(password);
+    this.encryptionEnabled = true;
+    return true;
+  }
+
+  // Check if encryption is enabled
+  isEncrypted() {
+    return localStorage.getItem('clawgpt-filememory-encrypted') === 'true';
+  }
+
+  // Check if encryption needs password unlock
+  needsUnlock() {
+    return this.isEncrypted() && !this.encryptionEnabled;
+  }
+
   // Auto-setup: prompt user to select the clawgpt-memory folder on first run
   async autoSetup() {
     if (this.enabled) return true; // Already set up
@@ -177,7 +217,7 @@ class FileMemoryStorage {
   }
 
   async appendToDateFile(date, messages) {
-    const filename = `${date}.jsonl`;
+    const filename = this.encryptionEnabled ? `${date}.enc.jsonl` : `${date}.jsonl`;
     
     try {
       // Get or create file
@@ -187,24 +227,61 @@ class FileMemoryStorage {
       const file = await fileHandle.getFile();
       const existingContent = await file.text();
       
-      // Load existing message IDs to avoid duplicates
-      const existingIds = new Set();
+      // Check for encryption header
+      let isEncryptedFile = false;
+      let existingIds = new Set();
+      
       if (existingContent) {
-        for (const line of existingContent.split('\n')) {
+        const lines = existingContent.split('\n');
+        
+        // Check first line for header
+        if (lines[0]) {
+          try {
+            const header = JSON.parse(lines[0]);
+            if (header._encrypted === true) {
+              isEncryptedFile = true;
+            }
+          } catch {}
+        }
+        
+        // Parse existing IDs
+        const dataLines = isEncryptedFile ? lines.slice(1) : lines;
+        for (const line of dataLines) {
           if (line.trim()) {
             try {
-              const msg = JSON.parse(line);
-              if (msg.id) existingIds.add(msg.id);
+              let msg;
+              if (isEncryptedFile && this.crypto) {
+                msg = JSON.parse(await this.crypto.decrypt(line.trim()));
+              } else if (!isEncryptedFile) {
+                msg = JSON.parse(line);
+              }
+              if (msg?.id) existingIds.add(msg.id);
             } catch {}
           }
         }
       }
       
-      // Filter out duplicates and append new messages
+      // Filter out duplicates
       const newMessages = messages.filter(m => !existingIds.has(m.id));
       if (newMessages.length === 0) return;
       
-      const newLines = newMessages.map(m => JSON.stringify(m)).join('\n') + '\n';
+      // Prepare lines
+      let newLines = '';
+      
+      // Add header if new encrypted file
+      if (this.encryptionEnabled && !existingContent) {
+        newLines = JSON.stringify({ _encrypted: true, _version: 1 }) + '\n';
+      }
+      
+      // Add messages
+      for (const m of newMessages) {
+        if (this.encryptionEnabled && this.crypto) {
+          const encrypted = await this.crypto.encrypt(JSON.stringify(m));
+          newLines += encrypted + '\n';
+        } else {
+          newLines += JSON.stringify(m) + '\n';
+        }
+      }
       
       // Write back
       const writable = await fileHandle.createWritable({ keepExistingData: true });
@@ -267,13 +344,42 @@ class FileMemoryStorage {
             const file = await entry.getFile();
             const content = await file.text();
             
-            if (entry.name.endsWith('.jsonl')) {
+            if (entry.name.endsWith('.jsonl') || entry.name.endsWith('.enc.jsonl')) {
               // JSONL format: one message per line
-              for (const line of content.split('\n')) {
+              const lines = content.split('\n');
+              let isEncrypted = false;
+              let startIndex = 0;
+              
+              // Check for encryption header
+              if (lines[0]) {
+                try {
+                  const header = JSON.parse(lines[0]);
+                  if (header._encrypted === true) {
+                    isEncrypted = true;
+                    startIndex = 1;
+                    
+                    if (!this.crypto) {
+                      console.warn(`FileMemoryStorage: Cannot read encrypted file ${entry.name} - not unlocked`);
+                      continue;
+                    }
+                  }
+                } catch {}
+              }
+              
+              for (let i = startIndex; i < lines.length; i++) {
+                const line = lines[i];
                 if (!line.trim()) continue;
                 
                 try {
-                  const msg = JSON.parse(line);
+                  let msg;
+                  if (isEncrypted && this.crypto) {
+                    msg = JSON.parse(await this.crypto.decrypt(line.trim()));
+                  } else if (!isEncrypted) {
+                    msg = JSON.parse(line);
+                  } else {
+                    continue; // Skip encrypted content without crypto
+                  }
+                  
                   if (!msg.chatId) continue;
                   
                   // Create or update chat
@@ -361,5 +467,133 @@ class FileMemoryStorage {
 
   getDirectoryName() {
     return this.dirHandle?.name || null;
+  }
+}
+
+// Encryption helper for FileMemoryStorage
+class FileMemoryCrypto {
+  constructor() {
+    this.key = null;
+    this.salt = null;
+    this.PBKDF2_ITERATIONS = 100000;
+    this.SALT_LENGTH = 16;
+    this.IV_LENGTH = 12;
+  }
+
+  async deriveKey(password, salt) {
+    const encoder = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(password),
+      'PBKDF2',
+      false,
+      ['deriveKey']
+    );
+
+    return crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt: salt,
+        iterations: this.PBKDF2_ITERATIONS,
+        hash: 'SHA-256'
+      },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+  }
+
+  async init(password) {
+    const storedSalt = localStorage.getItem('clawgpt-filememory-salt');
+    if (storedSalt) {
+      this.salt = this.base64ToBuffer(storedSalt);
+    } else {
+      this.salt = crypto.getRandomValues(new Uint8Array(this.SALT_LENGTH));
+      localStorage.setItem('clawgpt-filememory-salt', this.bufferToBase64(this.salt));
+    }
+
+    this.key = await this.deriveKey(password, this.salt);
+
+    // Create verification
+    if (!localStorage.getItem('clawgpt-filememory-verify')) {
+      const testEnc = await this.encrypt('clawgpt-filememory-verify-' + Date.now());
+      localStorage.setItem('clawgpt-filememory-verify', testEnc);
+    }
+
+    return true;
+  }
+
+  async verifyPassword(password) {
+    const testData = localStorage.getItem('clawgpt-filememory-verify');
+    if (!testData) return true;
+
+    try {
+      const storedSalt = localStorage.getItem('clawgpt-filememory-salt');
+      if (!storedSalt) return false;
+
+      const salt = this.base64ToBuffer(storedSalt);
+      const tempKey = await this.deriveKey(password, salt);
+
+      const combined = this.base64ToBuffer(testData);
+      const iv = combined.slice(0, this.IV_LENGTH);
+      const ciphertext = combined.slice(this.IV_LENGTH);
+
+      await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, tempKey, ciphertext);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async encrypt(plaintext) {
+    if (!this.key) throw new Error('Not initialized');
+
+    const encoder = new TextEncoder();
+    const iv = crypto.getRandomValues(new Uint8Array(this.IV_LENGTH));
+    const ciphertext = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv },
+      this.key,
+      encoder.encode(plaintext)
+    );
+
+    const combined = new Uint8Array(iv.length + ciphertext.byteLength);
+    combined.set(iv);
+    combined.set(new Uint8Array(ciphertext), iv.length);
+    return this.bufferToBase64(combined);
+  }
+
+  async decrypt(encryptedData) {
+    if (!this.key) throw new Error('Not initialized');
+
+    const combined = this.base64ToBuffer(encryptedData);
+    const iv = combined.slice(0, this.IV_LENGTH);
+    const ciphertext = combined.slice(this.IV_LENGTH);
+
+    const plaintext = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv },
+      this.key,
+      ciphertext
+    );
+
+    return new TextDecoder().decode(plaintext);
+  }
+
+  bufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  }
+
+  base64ToBuffer(base64) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
   }
 }

@@ -7,9 +7,12 @@
     default-src 'self';
     script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com;
     style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com;
-    connect-src *;
+    connect-src 'self' ws: wss: https:;
     img-src 'self' data: blob:;
     font-src 'self' data:;
+    form-action 'none';
+    frame-ancestors 'none';
+    base-uri 'self';
   ">
   <title>ClawGPT</title>
   <link rel="icon" type="image/x-icon" href="favicon.ico">
@@ -18,6 +21,53 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" integrity="sha384-wFjoQjtV1y5jVHbt0p35Ui8aV8GVpEZkyF99OXWqP/eNJDU93D3Ugxkoyh6Y2I4A" crossorigin="anonymous">
 </head>
 <body>
+  <!-- Lock Screen (shown when PIN/password protection is enabled) -->
+  <div class="lock-screen" id="lockScreen" style="display: none;">
+    <div class="lock-screen-content">
+      <div class="lock-icon">🔒</div>
+      <h2>ClawGPT Locked</h2>
+      <p id="lockScreenMessage">Enter your PIN to continue</p>
+      <div class="lock-form">
+        <input type="password" id="lockPinInput" placeholder="Enter PIN" autocomplete="off" maxlength="20">
+        <button class="unlock-btn" id="unlockBtn">Unlock</button>
+      </div>
+      <p class="lock-error" id="lockError" style="display: none;">Incorrect PIN</p>
+      <p class="lock-hint" id="lockHint"></p>
+    </div>
+  </div>
+
+  <!-- Session Expired Overlay -->
+  <div class="session-expired-overlay" id="sessionExpiredOverlay" style="display: none;">
+    <div class="session-expired-content">
+      <div class="session-icon">⏱️</div>
+      <h2>Session Expired</h2>
+      <p>Your session has been disconnected due to inactivity.</p>
+      <button class="reconnect-btn" id="sessionReconnectBtn">Reconnect</button>
+    </div>
+  </div>
+
+  <!-- Encryption Password Modal -->
+  <div class="modal" id="encryptionModal">
+    <div class="modal-content modal-small">
+      <div class="modal-header">
+        <h2 id="encryptionModalTitle">🔐 Unlock Encrypted Data</h2>
+        <button class="close-btn" id="closeEncryptionModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="encryptionModalDesc">Enter your encryption password to access your chats.</p>
+        <div class="form-group">
+          <label for="encryptionPasswordInput">Password</label>
+          <input type="password" id="encryptionPasswordInput" placeholder="Enter password" autocomplete="off">
+        </div>
+        <p class="encryption-error" id="encryptionError" style="display: none; color: #e74c3c;">Incorrect password</p>
+        <div class="settings-actions">
+          <button class="cancel-btn" id="encryptionCancelBtn">Cancel</button>
+          <button class="save-btn" id="encryptionConfirmBtn">Unlock</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="app">
     <!-- Sidebar overlay for mobile -->
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
@@ -308,6 +358,70 @@
           <span class="setting-hint" id="qrHintLocal">Scan with your phone to open ClawGPT on mobile (same WiFi network)</span>
           <span class="setting-hint warning">⚠️ Don't share this QR code — it contains your auth token</span>
           <div class="mobile-url" id="mobileUrl"></div>
+        </div>
+        <div class="settings-divider"></div>
+        <div class="settings-section-title">🔐 Security</div>
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="enablePinLock">
+            Require PIN to access
+          </label>
+          <span class="setting-hint">Lock ClawGPT with a PIN on page load</span>
+          <div class="sub-setting" id="pinSettings" style="display: none;">
+            <div class="form-group">
+              <label for="pinInput">PIN (4-20 characters)</label>
+              <input type="password" id="pinInput" placeholder="Enter new PIN" minlength="4" maxlength="20">
+            </div>
+            <div class="form-group">
+              <label for="idleTimeoutSelect">Auto-lock after inactivity</label>
+              <select id="idleTimeoutSelect">
+                <option value="5">5 minutes</option>
+                <option value="15" selected>15 minutes</option>
+                <option value="30">30 minutes</option>
+                <option value="60">1 hour</option>
+                <option value="0">Never</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="enableChatEncryption">
+            Encrypt stored chats
+          </label>
+          <span class="setting-hint">Encrypt chat history with a password (AES-256-GCM)</span>
+          <div class="sub-setting" id="encryptionSettings" style="display: none;">
+            <div class="form-group">
+              <label for="chatEncryptionPassword">Encryption Password</label>
+              <input type="password" id="chatEncryptionPassword" placeholder="Enter password">
+            </div>
+            <button class="data-btn" id="setEncryptionBtn">Set Encryption Password</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="sessionTimeoutSelect">Session timeout</label>
+          <select id="sessionTimeoutSelect">
+            <option value="15">15 minutes</option>
+            <option value="30" selected>30 minutes</option>
+            <option value="60">1 hour</option>
+            <option value="120">2 hours</option>
+            <option value="0">Never</option>
+          </select>
+          <span class="setting-hint">Disconnect WebSocket after inactivity</span>
+        </div>
+        <div class="form-group">
+          <div class="token-status-row">
+            <span id="tokenAgeStatus">Token age: Unknown</span>
+            <button class="data-btn" id="rotateTokenBtn" style="margin-left: 10px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <polyline points="23 4 23 10 17 10"/>
+                <polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+              Rotate Token
+            </button>
+          </div>
+          <span class="setting-hint" id="tokenRotationHint">Regularly rotate your auth token for better security</span>
         </div>
         <div class="settings-actions">
           <button class="save-btn" id="saveSettingsBtn">Save</button>
@@ -604,9 +718,11 @@
   
   <script src="config.js" onerror="/* config.js is optional */"></script>
   <script src="error-handler.js"></script>
+  <script src="secure-config.js"></script>
   <script src="chat-storage.js"></script>
   <script src="file-memory-storage.js"></script>
   <script src="memory-storage.js"></script>
+  <script src="security.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

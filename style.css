@@ -3106,3 +3106,196 @@ body {
   border-radius: 4px;
   font-size: 12px;
 }
+
+/* ============================================
+   SECURITY UI STYLES
+   ============================================ */
+
+/* Lock Screen */
+.lock-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg-primary);
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lock-screen-content {
+  text-align: center;
+  padding: 40px;
+  max-width: 400px;
+}
+
+.lock-icon {
+  font-size: 64px;
+  margin-bottom: 20px;
+}
+
+.lock-screen h2 {
+  margin-bottom: 12px;
+  color: var(--text-primary);
+}
+
+.lock-screen p {
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+
+.lock-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lock-form input {
+  padding: 12px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 16px;
+  text-align: center;
+  letter-spacing: 4px;
+}
+
+.lock-form input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+.unlock-btn {
+  padding: 12px 24px;
+  background: var(--accent-color);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.unlock-btn:hover {
+  background: var(--accent-hover);
+}
+
+.lock-error {
+  color: #e74c3c;
+  margin-top: 12px;
+  font-size: 14px;
+}
+
+.lock-hint {
+  color: var(--text-muted);
+  margin-top: 24px;
+  font-size: 12px;
+}
+
+/* Session Expired Overlay */
+.session-expired-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.session-expired-content {
+  text-align: center;
+  padding: 40px;
+  background: var(--bg-secondary);
+  border-radius: 16px;
+  max-width: 400px;
+}
+
+.session-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.session-expired-content h2 {
+  margin-bottom: 12px;
+  color: var(--text-primary);
+}
+
+.session-expired-content p {
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+
+.reconnect-btn {
+  padding: 12px 32px;
+  background: var(--accent-color);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.reconnect-btn:hover {
+  background: var(--accent-hover);
+}
+
+/* Security Settings */
+.token-status-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+#tokenAgeStatus {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+#tokenAgeStatus.warning {
+  color: #f39c12;
+}
+
+#tokenAgeStatus.danger {
+  color: #e74c3c;
+}
+
+/* Encryption Modal */
+.encryption-error {
+  font-size: 14px;
+  margin-top: 8px;
+}
+
+/* Sub-settings animation */
+.sub-setting {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  transition: opacity 0.2s, max-height 0.2s;
+}
+
+/* PIN input styling */
+#pinInput {
+  letter-spacing: 2px;
+}
+
+/* Token rotation button */
+#rotateTokenBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#tokenRotationHint.warning {
+  color: #f39c12;
+  font-weight: 500;
+}

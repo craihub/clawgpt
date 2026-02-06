@@ -38,6 +38,9 @@ class ClawGPT {
       this.isMobile = false;
     }
     this.fileMemoryStorage = new FileMemoryStorage();
+    
+    // Security manager
+    this.security = null;
 
     this.loadSettings();
     this.initUI();
@@ -93,6 +96,13 @@ class ClawGPT {
         }
         // If reconnect failed, fall through to setup wizard
       }
+    }
+
+    // Initialize security manager
+    if (window.SecurityManager) {
+      this.security = new SecurityManager(this);
+      await this.security.init();
+      this.initSecurityUI();
     }
 
     // Check if we need to show setup wizard
@@ -2938,6 +2948,172 @@ window.CLAWGPT_CONFIG = {
 
     // Render chat list
     this.renderChatList();
+  }
+
+  // Security UI initialization
+  initSecurityUI() {
+    // PIN lock toggle
+    const enablePinLock = document.getElementById('enablePinLock');
+    const pinSettings = document.getElementById('pinSettings');
+    const pinInput = document.getElementById('pinInput');
+    const idleTimeoutSelect = document.getElementById('idleTimeoutSelect');
+
+    if (enablePinLock && this.security) {
+      enablePinLock.checked = this.security.isPinEnabled();
+      if (pinSettings) {
+        pinSettings.style.display = enablePinLock.checked ? 'block' : 'none';
+      }
+
+      enablePinLock.addEventListener('change', async (e) => {
+        if (e.target.checked) {
+          if (pinSettings) pinSettings.style.display = 'block';
+          if (pinInput) pinInput.focus();
+        } else {
+          // Disable PIN
+          this.security.removePin();
+          if (pinSettings) pinSettings.style.display = 'none';
+          this.showToast('PIN lock disabled');
+        }
+      });
+    }
+
+    // Set PIN
+    if (pinInput && this.security) {
+      pinInput.addEventListener('keydown', async (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          try {
+            await this.security.setPin(pinInput.value);
+            pinInput.value = '';
+            this.showToast('PIN set successfully');
+          } catch (err) {
+            this.showToast(err.message, true);
+          }
+        }
+      });
+    }
+
+    // Idle timeout
+    if (idleTimeoutSelect && this.security) {
+      idleTimeoutSelect.value = String(this.security.idleTimeoutMs / 60000);
+      idleTimeoutSelect.addEventListener('change', (e) => {
+        this.security.setIdleTimeout(parseInt(e.target.value));
+      });
+    }
+
+    // Session timeout
+    const sessionTimeoutSelect = document.getElementById('sessionTimeoutSelect');
+    if (sessionTimeoutSelect && this.security) {
+      sessionTimeoutSelect.value = String(this.security.sessionTimeoutMs / 60000);
+      sessionTimeoutSelect.addEventListener('change', (e) => {
+        this.security.setSessionTimeout(parseInt(e.target.value));
+      });
+    }
+
+    // Chat encryption toggle
+    const enableChatEncryption = document.getElementById('enableChatEncryption');
+    const encryptionSettings = document.getElementById('encryptionSettings');
+    const chatEncryptionPassword = document.getElementById('chatEncryptionPassword');
+    const setEncryptionBtn = document.getElementById('setEncryptionBtn');
+
+    if (enableChatEncryption) {
+      enableChatEncryption.checked = this.storage.isEncrypted();
+      if (encryptionSettings) {
+        encryptionSettings.style.display = enableChatEncryption.checked ? 'block' : 'none';
+      }
+
+      enableChatEncryption.addEventListener('change', async (e) => {
+        if (e.target.checked) {
+          if (encryptionSettings) encryptionSettings.style.display = 'block';
+          if (chatEncryptionPassword) chatEncryptionPassword.focus();
+        } else {
+          // Disable encryption
+          if (confirm('Disable chat encryption? All chats will be stored unencrypted.')) {
+            await this.storage.disableEncryption();
+            this.showToast('Encryption disabled');
+          } else {
+            e.target.checked = true;
+          }
+          if (encryptionSettings) encryptionSettings.style.display = 'none';
+        }
+      });
+    }
+
+    if (setEncryptionBtn && chatEncryptionPassword) {
+      setEncryptionBtn.addEventListener('click', async () => {
+        const password = chatEncryptionPassword.value;
+        if (password.length < 6) {
+          this.showToast('Password must be at least 6 characters', true);
+          return;
+        }
+
+        await this.storage.setEncryptionPassword(password);
+        // Re-save all chats encrypted
+        await this.storage.saveAll(this.chats);
+        chatEncryptionPassword.value = '';
+        this.showToast('Encryption enabled - all chats encrypted');
+      });
+    }
+
+    // Token rotation button
+    const rotateTokenBtn = document.getElementById('rotateTokenBtn');
+    if (rotateTokenBtn && this.security) {
+      rotateTokenBtn.addEventListener('click', () => {
+        this.security.rotateToken();
+      });
+    }
+
+    // Lock screen unlock button
+    const unlockBtn = document.getElementById('unlockBtn');
+    const lockPinInput = document.getElementById('lockPinInput');
+    if (unlockBtn && lockPinInput && this.security) {
+      unlockBtn.addEventListener('click', () => {
+        this.security.attemptUnlock(lockPinInput.value);
+      });
+      lockPinInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          this.security.attemptUnlock(lockPinInput.value);
+        }
+      });
+    }
+
+    // Session expired reconnect button
+    const sessionReconnectBtn = document.getElementById('sessionReconnectBtn');
+    if (sessionReconnectBtn && this.security) {
+      sessionReconnectBtn.addEventListener('click', () => {
+        this.security.reconnectSession();
+      });
+    }
+
+    // Encryption modal
+    const encryptionModal = document.getElementById('encryptionModal');
+    const closeEncryptionModal = document.getElementById('closeEncryptionModal');
+    const encryptionPasswordInput = document.getElementById('encryptionPasswordInput');
+    const encryptionConfirmBtn = document.getElementById('encryptionConfirmBtn');
+    const encryptionCancelBtn = document.getElementById('encryptionCancelBtn');
+
+    if (closeEncryptionModal) {
+      closeEncryptionModal.addEventListener('click', () => {
+        if (encryptionModal) encryptionModal.classList.remove('open');
+      });
+    }
+    if (encryptionCancelBtn) {
+      encryptionCancelBtn.addEventListener('click', () => {
+        if (encryptionModal) encryptionModal.classList.remove('open');
+      });
+    }
+    if (encryptionConfirmBtn && encryptionPasswordInput && this.security) {
+      encryptionConfirmBtn.addEventListener('click', () => {
+        this.security.attemptEncryptionUnlock(encryptionPasswordInput.value);
+      });
+      encryptionPasswordInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          this.security.attemptEncryptionUnlock(encryptionPasswordInput.value);
+        }
+      });
+    }
   }
 
   applyTheme() {
