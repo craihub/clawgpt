@@ -230,8 +230,29 @@ class ChatStorage {
       const store = transaction.objectStore(this.storeName);
       store.put(chat);
       transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error);
+      transaction.onerror = (e) => {
+        console.error('Failed to save chat:', e);
+        this.checkStorageQuota();
+        reject(transaction.error);
+      };
     });
+  }
+
+  async checkStorageQuota() {
+    if (navigator.storage && navigator.storage.estimate) {
+      try {
+        const estimate = await navigator.storage.estimate();
+        const usedMB = Math.round((estimate.usage || 0) / 1024 / 1024);
+        const quotaMB = Math.round((estimate.quota || 0) / 1024 / 1024);
+        const usedPercent = quotaMB > 0 ? Math.round((usedMB / quotaMB) * 100) : 0;
+        if (usedPercent > 90) {
+          console.warn(`Storage nearly full: ${usedMB}MB / ${quotaMB}MB (${usedPercent}%)`);
+          showErrorBanner(`Storage nearly full (${usedPercent}%). Consider deleting old chats.`, true);
+        }
+      } catch (e) {
+        // Silently ignore quota check failures
+      }
+    }
   }
 
   async deleteOne(chatId) {
@@ -1896,8 +1917,15 @@ window.CLAWGPT_CONFIG = {
   }
   
   estimateTokens(text) {
-    // Rough estimate: ~4 chars per token for English
-    return Math.ceil(text.length / 4);
+    if (!text) return 0;
+    // Better heuristic: count words + punctuation/special tokens separately
+    // Average English word ≈ 1.3 tokens, code tends higher
+    const words = text.split(/\s+/).filter(w => w.length > 0).length;
+    // Code/special characters add extra tokens (brackets, operators, etc.)
+    const specials = (text.match(/[{}()\[\]<>:;,=+\-*\/\\|@#$%^&!~`"']/g) || []).length;
+    // Newlines often become tokens
+    const newlines = (text.match(/\n/g) || []).length;
+    return Math.ceil(words * 1.3 + specials * 0.5 + newlines * 0.5);
   }
 
   // Chat storage (IndexedDB with localStorage fallback)
@@ -3033,19 +3061,41 @@ window.CLAWGPT_CONFIG = {
   handleSyncData(msg) {
     const incomingChats = msg.chats || {};
     const theirDeviceId = msg.deviceId;
-    
+
     if (theirDeviceId === this.getDeviceId()) return;
-    
+
     let merged = 0;
     for (const [id, chat] of Object.entries(incomingChats)) {
       const ourChat = this.chats[id];
-      const ourUpdatedAt = ourChat?.updatedAt || ourChat?.createdAt || 0;
-      const theirUpdatedAt = chat.updatedAt || chat.createdAt || 0;
-      
-      // Only merge if theirs is newer or we don't have it
-      if (!ourChat || theirUpdatedAt > ourUpdatedAt) {
+
+      if (!ourChat) {
+        // We don't have it at all — take theirs
         this.chats[id] = chat;
         merged++;
+      } else {
+        // Merge messages by ID to avoid losing local messages
+        const ourMsgIds = new Set(ourChat.messages.map(m => m.id));
+        let added = 0;
+        for (const theirMsg of chat.messages) {
+          if (!ourMsgIds.has(theirMsg.id)) {
+            ourChat.messages.push(theirMsg);
+            added++;
+          }
+        }
+        // Sort messages by timestamp after merge
+        if (added > 0) {
+          ourChat.messages.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+        }
+        // Take newer metadata (title, updatedAt, etc.)
+        const ourUpdatedAt = ourChat.updatedAt || ourChat.createdAt || 0;
+        const theirUpdatedAt = chat.updatedAt || chat.createdAt || 0;
+        if (theirUpdatedAt > ourUpdatedAt) {
+          ourChat.title = chat.title;
+          ourChat.updatedAt = chat.updatedAt;
+          ourChat.pinned = chat.pinned;
+          if (chat.metadata) ourChat.metadata = chat.metadata;
+        }
+        if (added > 0) merged++;
       }
     }
     
@@ -3102,16 +3152,32 @@ window.CLAWGPT_CONFIG = {
     // Handle full chat replacement (for renames, deletes, full-state sync, etc.)
     const chat = msg.chat;
     const theirDeviceId = msg.deviceId;
-    
+
     if (theirDeviceId === this.getDeviceId()) return;
     if (!chat || !chat.id) return;
-    
+
     const ourChat = this.chats[chat.id];
     const ourUpdatedAt = ourChat?.updatedAt || ourChat?.createdAt || 0;
     const theirUpdatedAt = chat.updatedAt || chat.createdAt || 0;
-    
-    if (!ourChat || theirUpdatedAt > ourUpdatedAt) {
+
+    if (!ourChat) {
       this.chats[chat.id] = chat;
+    } else if (theirUpdatedAt > ourUpdatedAt) {
+      // Merge messages by ID instead of overwriting
+      const ourMsgIds = new Set(ourChat.messages.map(m => m.id));
+      for (const theirMsg of chat.messages) {
+        if (!ourMsgIds.has(theirMsg.id)) {
+          ourChat.messages.push(theirMsg);
+        }
+      }
+      ourChat.messages.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+      ourChat.title = chat.title;
+      ourChat.updatedAt = chat.updatedAt;
+      ourChat.pinned = chat.pinned;
+      if (chat.metadata) ourChat.metadata = chat.metadata;
+    }
+
+    if (!ourChat || theirUpdatedAt > ourUpdatedAt) {
       this.saveChats();
       this.renderChatList();
       
@@ -4333,12 +4399,31 @@ window.CLAWGPT_CONFIG = {
   }
   
   async performSemanticSearch(query, excludeChats) {
+    // Check semantic search cache (avoid re-querying AI for same query)
+    if (!this._semanticCache) this._semanticCache = new Map();
+    const cacheKey = query.toLowerCase().trim();
+    const cached = this._semanticCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < 5 * 60 * 1000) { // 5 min TTL
+      // Use cached results, filtering out already-found chats
+      const cachedResults = cached.results.filter(r => !excludeChats.has(r.chatId));
+      if (cachedResults.length > 0) {
+        const mergedResults = [...this.currentSearchResults, ...cachedResults];
+        mergedResults.sort((a, b) => {
+          const order = { exact: 0, topic: 1, summary: 1, entity: 1, semantic: 2 };
+          return (order[a.matchType] ?? 1) - (order[b.matchType] ?? 1) || (b.timestamp || 0) - (a.timestamp || 0);
+        });
+        this.currentSearchResults = mergedResults;
+        this.renderSearchResults(mergedResults, query);
+      }
+      return;
+    }
+
     // Build list of chats with summaries for semantic matching
     const chatSummaries = [];
     Object.entries(this.chats).forEach(([chatId, chat]) => {
       // Skip chats already found by keyword/metadata
       if (excludeChats.has(chatId)) return;
-      
+
       // Need either a summary or enough messages to describe
       const summary = chat.metadata?.summary || '';
       const topics = (chat.metadata?.topics || []).join(', ');
@@ -4468,9 +4553,21 @@ Example: [0, 2, 5]`;
       });
       
       if (semanticResults.length > 0) {
+        // Cache results for this query (avoids re-querying AI)
+        if (!this._semanticCache) this._semanticCache = new Map();
+        this._semanticCache.set(query.toLowerCase().trim(), {
+          results: semanticResults,
+          timestamp: Date.now()
+        });
+        // Limit cache size
+        if (this._semanticCache.size > 50) {
+          const oldest = this._semanticCache.keys().next().value;
+          this._semanticCache.delete(oldest);
+        }
+
         // Merge with existing results
         const mergedResults = [...this.currentSearchResults, ...semanticResults];
-        
+
         // Re-sort: exact first, then metadata, then semantic
         mergedResults.sort((a, b) => {
           const order = { exact: 0, topic: 1, summary: 1, entity: 1, semantic: 2 };
@@ -4479,11 +4576,11 @@ Example: [0, 2, 5]`;
           if (orderA !== orderB) return orderA - orderB;
           return (b.timestamp || 0) - (a.timestamp || 0);
         });
-        
+
         this.currentSearchResults = mergedResults;
         this.renderSearchResults(mergedResults, query);
       }
-      
+
     } catch (error) {
       console.error('Failed to parse semantic search response:', error);
     }
@@ -4672,7 +4769,19 @@ Example: [0, 2, 5]`;
 
       this.ws = new WebSocket(this.gatewayUrl);
 
+      // Connection timeout - close if not connected within 30 seconds
+      const connectTimeout = setTimeout(() => {
+        if (this.ws && this.ws.readyState !== WebSocket.OPEN) {
+          console.warn('Gateway connection timed out after 30s');
+          this.ws.close();
+          if (!this.relayEncrypted) {
+            this.setStatus('Connection timed out');
+          }
+        }
+      }, 30000);
+
       this.ws.onopen = () => {
+        clearTimeout(connectTimeout);
         console.log('WebSocket connected');
         // Wait for challenge
       };
@@ -5014,6 +5123,7 @@ Example: [0, 2, 5]`;
     }
     
     this.currentChatId = chatId;
+    this._visibleMessageCount = null; // Reset virtualization on chat switch
     this.renderMessages();
     this.renderChatList();
     this.updateTokenDisplay(); // Also updates model display
@@ -5367,10 +5477,25 @@ Example: [0, 2, 5]`;
         visibleMessages.push({ msg, originalIdx });
       }
     });
-    
-    this.elements.messages.innerHTML = visibleMessages.map(({ msg, originalIdx }, displayIdx) => {
+
+    // Message virtualization: only render last N messages for performance
+    const MSG_PAGE_SIZE = 50;
+    const visibleCount = this._visibleMessageCount || MSG_PAGE_SIZE;
+    const startIdx = Math.max(0, visibleMessages.length - visibleCount);
+    const displayedMessages = visibleMessages.slice(startIdx);
+    const hasMore = startIdx > 0;
+
+    // "Load earlier" button
+    let loadMoreHtml = '';
+    if (hasMore) {
+      loadMoreHtml = `<div class="load-more-messages" id="loadMoreMessages">
+        <button onclick="window.clawgpt.loadMoreMessages()">Load ${Math.min(MSG_PAGE_SIZE, startIdx)} earlier messages (${startIdx} hidden)</button>
+      </div>`;
+    }
+
+    this.elements.messages.innerHTML = loadMoreHtml + displayedMessages.map(({ msg, originalIdx }, displayIdx) => {
       const isUser = msg.role === 'user';
-      const isLastAssistant = !isUser && displayIdx === visibleMessages.length - 1;
+      const isLastAssistant = !isUser && displayIdx === displayedMessages.length - 1;
       const copyIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
       const speakIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>`;
       const stopIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`;
@@ -5457,7 +5582,19 @@ Example: [0, 2, 5]`;
     this.scrollToBottom();
     this.highlightCode();
   }
-  
+
+  loadMoreMessages() {
+    const MSG_PAGE_SIZE = 50;
+    this._visibleMessageCount = (this._visibleMessageCount || MSG_PAGE_SIZE) + MSG_PAGE_SIZE;
+    // Remember scroll position to avoid jumping to bottom
+    const messagesEl = this.elements.messages;
+    const prevScrollHeight = messagesEl.scrollHeight;
+    this.renderMessages();
+    // Restore scroll position relative to where user was
+    const newScrollHeight = messagesEl.scrollHeight;
+    messagesEl.scrollTop = newScrollHeight - prevScrollHeight;
+  }
+
   attachMessageActions() {
     // Copy buttons
     this.elements.messages.querySelectorAll('.copy-btn').forEach(btn => {
