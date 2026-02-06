@@ -2487,11 +2487,16 @@ window.CLAWGPT_CONFIG = {
     this.applyTheme();
 
     // Event listeners
-    // Delegated click handler for images (avoid inline onclick XSS)
+    // Delegated click handlers (avoid inline onclick XSS)
     this.elements.messagesContainer.addEventListener('click', (e) => {
       const img = e.target.closest('.clickable-img');
       if (img && img.src && img.src.startsWith('data:')) {
         window.open(img.src, '_blank');
+        return;
+      }
+      const loadMoreBtn = e.target.closest('.load-more-btn');
+      if (loadMoreBtn) {
+        this.loadMoreMessages();
       }
     });
     this.elements.sendBtn.addEventListener('click', () => this.sendMessage());
@@ -4474,7 +4479,7 @@ Example: [0, 2, 5]`;
     let loadMoreHtml = '';
     if (hasMore) {
       loadMoreHtml = `<div class="load-more-messages" id="loadMoreMessages">
-        <button onclick="window.clawgpt.loadMoreMessages()">Load ${Math.min(MSG_PAGE_SIZE, startIdx)} earlier messages (${startIdx} hidden)</button>
+        <button class="load-more-btn">Load ${Math.min(MSG_PAGE_SIZE, startIdx)} earlier messages (${startIdx} hidden)</button>
       </div>`;
     }
 
