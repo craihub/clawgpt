@@ -9102,7 +9102,12 @@ If multiple files, return multiple objects in the array.`;
         this._talkSendTimer = setTimeout(() => {
           // Only send if we still have a transcript and aren't already waiting
           if (this._talkFinalTranscript.trim() && !this._talkWaitingForResponse) {
-            console.log('[TalkMode] Debounce timer fired, sending transcript');
+            console.log('[TalkMode] Debounce timer fired, state:', this.talkModeState, 'waiting:', this._talkWaitingForResponse);
+            // Don't send if we're already waiting for a response or AI is speaking
+            if (this._talkWaitingForResponse || this.talkModeState === 'speaking') {
+              console.log('[TalkMode] Skipping send — already processing');
+              return;
+            }
             const text = this._talkFinalTranscript.trim();
             this._talkFinalTranscript = '';
             this._talkInterimTranscript = '';
@@ -9269,6 +9274,17 @@ If multiple files, return multiple objects in the array.`;
   sendTalkMessage(text) {
     console.log('[TalkMode] sendTalkMessage called with:', JSON.stringify(text), 'connected:', this.connected);
     if (!text.trim() || !this.connected) return;
+
+    // Stop any currently playing audio before sending new message
+    if (this.audioQueue) {
+      this.audioQueue.clear();
+    }
+    speechSynthesis.cancel();
+
+    // Reset streaming TTS state for new message
+    this._talkSentenceBuffer = '';
+    this._lastTtsBufferPos = 0;
+    this._talkStreamingComplete = false;
 
     // Add to transcript
     this._talkTranscriptEntries.push({ role: 'user', text });
@@ -9519,7 +9535,9 @@ If multiple files, return multiple objects in the array.`;
 
   onAudioQueueEmpty() {
     // Called when AudioQueue finishes playing all chunks
-    if (this.talkModeActive && this._talkStreamingComplete) {
+    // Only proceed if we're done streaming AND still in speaking state
+    if (this.talkModeActive && this._talkStreamingComplete && this.talkModeState === 'speaking') {
+      console.log('[TalkMode] Audio queue empty, all done speaking');
       this.onTtsDone();
     }
   }
