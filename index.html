@@ -161,18 +161,6 @@
       <div class="intelligence-panel-header">
         <h2>Conversation Intelligence</h2>
         <div class="intelligence-panel-actions">
-          <button class="intelligence-refresh-btn" id="intelligenceRefreshBtn" title="Refresh analysis">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
-            </svg>
-          </button>
-          <button class="intelligence-download-all-btn" id="intelligenceDownloadAllBtn" title="Download all as markdown">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-          </button>
           <button class="intelligence-close-btn" id="intelligenceCloseBtn" title="Close panel">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -182,8 +170,59 @@
         </div>
       </div>
       <div class="intelligence-panel-body" id="intelligencePanelBody">
-        <div class="intelligence-empty">
-          <p>Click the sparkle button to analyze this conversation.</p>
+        <!-- Controls section -->
+        <div class="intelligence-controls">
+          <div class="intelligence-prompt-row">
+            <select class="intelligence-prompt-select" id="intelligencePromptSelect">
+              <option value="default">Default prompt</option>
+            </select>
+            <button class="intelligence-prompt-view-btn" id="intelligencePromptViewBtn" title="View/edit prompt">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="intelligence-prompt-editor" id="intelligencePromptEditor" style="display:none">
+            <textarea class="intelligence-prompt-textarea" id="intelligencePromptTextarea" rows="8" placeholder="Enter extraction prompt..."></textarea>
+            <div class="intelligence-prompt-editor-actions">
+              <input type="text" class="intelligence-prompt-name-input" id="intelligencePromptName" placeholder="Prompt name (to save as custom)">
+              <button class="intelligence-prompt-save-btn" id="intelligencePromptSaveBtn">Save</button>
+              <button class="intelligence-prompt-cancel-btn" id="intelligencePromptCancelBtn">Cancel</button>
+            </div>
+          </div>
+          <div class="intelligence-info" id="intelligenceInfo">claude-sonnet-4-5-20250514 • 0 messages</div>
+          <div class="intelligence-generate-row">
+            <button class="intelligence-generate-btn" id="intelligenceGenerateBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <path d="M12 2L9 9H2l6 4.5L5.5 21 12 16l6.5 5L16 13.5 22 9h-7z"/>
+              </svg>
+              Generate
+            </button>
+            <div class="intelligence-version-controls" id="intelligenceVersionControls" style="display:none">
+              <select class="intelligence-version-select" id="intelligenceVersionSelect" title="Version history"></select>
+              <label class="intelligence-replace-label" title="Overwrite latest version instead of creating new">
+                <input type="checkbox" id="intelligenceReplaceCheck"> Replace
+              </label>
+            </div>
+          </div>
+        </div>
+        <!-- Results section -->
+        <div class="intelligence-results" id="intelligenceResults">
+          <div class="intelligence-empty">
+            <p>Click <strong>Generate</strong> to analyze this conversation with AI.</p>
+          </div>
+        </div>
+        <!-- Download all bar -->
+        <div class="intelligence-footer" id="intelligenceFooter" style="display:none">
+          <button class="intelligence-download-all-btn" id="intelligenceDownloadAllBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Download All
+          </button>
         </div>
       </div>
     </aside>

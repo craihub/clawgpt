@@ -2482,10 +2482,23 @@ window.CLAWGPT_CONFIG = {
       intelligenceBtn: document.getElementById('intelligenceBtn'),
       intelligencePanel: document.getElementById('intelligencePanel'),
       intelligencePanelBody: document.getElementById('intelligencePanelBody'),
+      intelligenceResults: document.getElementById('intelligenceResults'),
       intelligenceCloseBtn: document.getElementById('intelligenceCloseBtn'),
-      intelligenceRefreshBtn: document.getElementById('intelligenceRefreshBtn'),
+      intelligenceGenerateBtn: document.getElementById('intelligenceGenerateBtn'),
       intelligenceDownloadAllBtn: document.getElementById('intelligenceDownloadAllBtn'),
-      intelligenceResizeHandle: document.getElementById('intelligenceResizeHandle')
+      intelligenceResizeHandle: document.getElementById('intelligenceResizeHandle'),
+      intelligencePromptSelect: document.getElementById('intelligencePromptSelect'),
+      intelligencePromptViewBtn: document.getElementById('intelligencePromptViewBtn'),
+      intelligencePromptEditor: document.getElementById('intelligencePromptEditor'),
+      intelligencePromptTextarea: document.getElementById('intelligencePromptTextarea'),
+      intelligencePromptName: document.getElementById('intelligencePromptName'),
+      intelligencePromptSaveBtn: document.getElementById('intelligencePromptSaveBtn'),
+      intelligencePromptCancelBtn: document.getElementById('intelligencePromptCancelBtn'),
+      intelligenceInfo: document.getElementById('intelligenceInfo'),
+      intelligenceVersionSelect: document.getElementById('intelligenceVersionSelect'),
+      intelligenceVersionControls: document.getElementById('intelligenceVersionControls'),
+      intelligenceReplaceCheck: document.getElementById('intelligenceReplaceCheck'),
+      intelligenceFooter: document.getElementById('intelligenceFooter')
     };
 
     // Models list (fetched on connect)
@@ -2766,9 +2779,15 @@ window.CLAWGPT_CONFIG = {
     // Intelligence panel
     this.elements.intelligenceBtn.addEventListener('click', () => this.toggleIntelligencePanel());
     this.elements.intelligenceCloseBtn.addEventListener('click', () => this.closeIntelligencePanel());
-    this.elements.intelligenceRefreshBtn.addEventListener('click', () => this.runIntelligenceExtraction(true));
+    this.elements.intelligenceGenerateBtn.addEventListener('click', () => this.runIntelligenceExtraction());
     this.elements.intelligenceDownloadAllBtn.addEventListener('click', () => this.downloadAllIntelligence());
+    this.elements.intelligencePromptViewBtn.addEventListener('click', () => this.togglePromptEditor());
+    this.elements.intelligencePromptSaveBtn.addEventListener('click', () => this.saveCustomPrompt());
+    this.elements.intelligencePromptCancelBtn.addEventListener('click', () => this.hidePromptEditor());
+    this.elements.intelligencePromptSelect.addEventListener('change', (e) => this.onPromptSelected(e));
+    this.elements.intelligenceVersionSelect.addEventListener('change', (e) => this.onVersionSelected(e));
     this.initIntelligenceResize();
+    this.loadIntelligencePrompts();
 
     // Sidebar overlay - close sidebar when clicking outside
     const sidebarOverlay = document.getElementById('sidebarOverlay');
@@ -6271,6 +6290,22 @@ Example: [0, 2, 5]`;
       return;
     }
 
+    // Handle intelligence extraction session responses
+    if (payload.sessionKey === '__clawgpt_intelligence') {
+      if (state === 'delta' && content) {
+        this._intelligenceBuffer = content;
+        this.updateIntelligenceProgress(content);
+      } else if (state === 'final' || state === 'aborted') {
+        const finalContent = content || this._intelligenceBuffer || '';
+        this._intelligenceBuffer = '';
+        this.handleIntelligenceResponse(finalContent);
+      } else if (state === 'error') {
+        this._intelligenceBuffer = '';
+        this.handleIntelligenceError(payload.errorMessage || 'Extraction failed');
+      }
+      return;
+    }
+
     // Check if this event is for our session (handle both short and full session keys)
     if (payload.sessionKey &&
         payload.sessionKey !== this.sessionKey &&
@@ -6650,8 +6685,30 @@ Title:`;
   }
 
   // ========================================
-  // Intelligence Panel
+  // Intelligence Panel — AI-Powered Extraction
   // ========================================
+
+  static INTELLIGENCE_DEFAULT_PROMPT = `You are a conversation analyst. Analyze the following conversation and extract it into well-structured markdown files.
+
+RULES:
+1. If the conversation covers ONE topic, produce exactly ONE file.
+2. If the conversation covers MULTIPLE distinct topics (e.g., user switched subjects mid-conversation), produce SEPARATE files for each topic.
+3. Each file should be a complete, self-contained markdown document that gives another AI agent enough context to understand the topic WITHOUT needing the original conversation.
+4. Include: key decisions made, action items, technical details, code snippets, links, and important context.
+5. Remove conversational fluff (greetings, "let me check", "sure thing", etc.) — keep only substantive content.
+6. Use clear markdown structure with headers, lists, and code blocks.
+7. Generate a descriptive filename (kebab-case, .md extension).
+
+OUTPUT FORMAT — Return ONLY valid JSON, no markdown fences, no explanation:
+[
+  {
+    "filename": "descriptive-topic-name.md",
+    "title": "Human Readable Title",
+    "markdown": "# Title\\n\\n## Section\\n\\nContent here..."
+  }
+]
+
+If multiple files, return multiple objects in the array.`;
 
   updateIntelligenceButton() {
     const chat = this.currentChatId ? this.chats[this.currentChatId] : null;
@@ -6674,10 +6731,16 @@ Title:`;
     this.elements.intelligenceBtn.classList.add('active');
 
     const chat = this.chats[this.currentChatId];
-    if (chat && chat.intelligenceData) {
-      this.renderIntelligenceResults(chat.intelligenceData);
-    } else {
-      this.runIntelligenceExtraction();
+    // Update info line
+    const msgCount = chat ? chat.messages.length : 0;
+    this.elements.intelligenceInfo.textContent = `claude-sonnet-4-5-20250514 • ${msgCount} messages`;
+
+    // Show existing results if available
+    if (chat && chat.intelligenceVersions && chat.intelligenceVersions.length > 0) {
+      const currentVer = chat.intelligenceCurrentVersion || chat.intelligenceVersions.length;
+      this.showVersionControls(chat);
+      const version = chat.intelligenceVersions.find(v => v.version === currentVer) || chat.intelligenceVersions[chat.intelligenceVersions.length - 1];
+      this.renderIntelligenceFiles(version.files);
     }
   }
 
@@ -6723,295 +6786,311 @@ Title:`;
     });
   }
 
-  runIntelligenceExtraction(forceRefresh = false) {
+  // --- Prompt Management ---
+
+  loadIntelligencePrompts() {
+    try {
+      const stored = localStorage.getItem('clawgpt-intel-prompts');
+      this._intelligencePrompts = stored ? JSON.parse(stored) : { custom: {}, selected: 'default' };
+    } catch {
+      this._intelligencePrompts = { custom: {}, selected: 'default' };
+    }
+    this.rebuildPromptSelect();
+  }
+
+  saveIntelligencePrompts() {
+    localStorage.setItem('clawgpt-intel-prompts', JSON.stringify(this._intelligencePrompts));
+  }
+
+  rebuildPromptSelect() {
+    const select = this.elements.intelligencePromptSelect;
+    select.innerHTML = '<option value="default">Default prompt</option>';
+    for (const name of Object.keys(this._intelligencePrompts.custom || {})) {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      select.appendChild(opt);
+    }
+    select.value = this._intelligencePrompts.selected || 'default';
+  }
+
+  getSelectedPrompt() {
+    const sel = this._intelligencePrompts.selected || 'default';
+    if (sel === 'default') return ClawGPT.INTELLIGENCE_DEFAULT_PROMPT;
+    return this._intelligencePrompts.custom[sel] || ClawGPT.INTELLIGENCE_DEFAULT_PROMPT;
+  }
+
+  onPromptSelected(e) {
+    this._intelligencePrompts.selected = e.target.value;
+    this.saveIntelligencePrompts();
+  }
+
+  togglePromptEditor() {
+    const editor = this.elements.intelligencePromptEditor;
+    if (editor.style.display === 'none') {
+      this.elements.intelligencePromptTextarea.value = this.getSelectedPrompt();
+      this.elements.intelligencePromptName.value = this._intelligencePrompts.selected === 'default' ? '' : this._intelligencePrompts.selected;
+      editor.style.display = 'block';
+    } else {
+      editor.style.display = 'none';
+    }
+  }
+
+  hidePromptEditor() {
+    this.elements.intelligencePromptEditor.style.display = 'none';
+  }
+
+  saveCustomPrompt() {
+    const name = this.elements.intelligencePromptName.value.trim();
+    const text = this.elements.intelligencePromptTextarea.value.trim();
+    if (!name) {
+      this.showToast('Enter a name to save the prompt', true);
+      return;
+    }
+    if (!text) return;
+    this._intelligencePrompts.custom[name] = text;
+    this._intelligencePrompts.selected = name;
+    this.saveIntelligencePrompts();
+    this.rebuildPromptSelect();
+    this.hidePromptEditor();
+    this.showToast(`Prompt "${name}" saved`);
+  }
+
+  // --- Version Management ---
+
+  showVersionControls(chat) {
+    if (!chat.intelligenceVersions || chat.intelligenceVersions.length === 0) {
+      this.elements.intelligenceVersionControls.style.display = 'none';
+      return;
+    }
+    this.elements.intelligenceVersionControls.style.display = 'flex';
+    const select = this.elements.intelligenceVersionSelect;
+    select.innerHTML = '';
+    for (const v of chat.intelligenceVersions) {
+      const opt = document.createElement('option');
+      opt.value = v.version;
+      const date = new Date(v.timestamp).toLocaleTimeString();
+      opt.textContent = `v${v.version} — ${date}`;
+      select.appendChild(opt);
+    }
+    select.value = chat.intelligenceCurrentVersion || chat.intelligenceVersions.length;
+  }
+
+  onVersionSelected(e) {
+    const chat = this.chats[this.currentChatId];
+    if (!chat || !chat.intelligenceVersions) return;
+    const ver = parseInt(e.target.value);
+    chat.intelligenceCurrentVersion = ver;
+    const version = chat.intelligenceVersions.find(v => v.version === ver);
+    if (version) {
+      this.renderIntelligenceFiles(version.files);
+    }
+  }
+
+  // --- AI Extraction ---
+
+  buildConversationText(messages) {
+    let text = '';
+    for (const msg of messages) {
+      if (!msg.content?.trim()) continue;
+      const role = msg.role === 'user' ? 'USER' : 'ASSISTANT';
+      text += `${role}:\n${msg.content}\n\n`;
+    }
+    // Truncate very long conversations
+    const MAX_CHARS = 100000;
+    if (text.length > MAX_CHARS) {
+      const half = Math.floor(MAX_CHARS / 2);
+      const totalMsgs = messages.length;
+      const approxKept = Math.ceil(totalMsgs * (MAX_CHARS / text.length));
+      text = text.substring(0, half) +
+        `\n\n... [approximately ${totalMsgs - approxKept} messages truncated for length] ...\n\n` +
+        text.substring(text.length - half);
+    }
+    return text;
+  }
+
+  runIntelligenceExtraction() {
     const chat = this.chats[this.currentChatId];
     if (!chat || chat.messages.length === 0) return;
-
-    if (!forceRefresh && chat.intelligenceData) {
-      this.renderIntelligenceResults(chat.intelligenceData);
+    if (!this.connected) {
+      this.showToast('Not connected to gateway', true);
       return;
     }
 
     // Show loading
-    this.elements.intelligencePanelBody.innerHTML = `
+    this.elements.intelligenceResults.innerHTML = `
       <div class="intelligence-loading">
         <div class="intelligence-spinner"></div>
-        <span>Analyzing conversation...</span>
+        <span>Analyzing conversation with Sonnet 4.5...</span>
       </div>
     `;
+    this.elements.intelligenceGenerateBtn.disabled = true;
+    this.elements.intelligenceFooter.style.display = 'none';
 
-    // Run extraction asynchronously
-    setTimeout(() => {
-      const data = this.extractIntelligence(chat.messages);
-      chat.intelligenceData = data;
-      this.saveChats();
-      this.renderIntelligenceResults(data);
-    }, 50);
+    // Build the extraction message
+    const prompt = this.getSelectedPrompt();
+    const conversationText = this.buildConversationText(chat.messages);
+    const fullMessage = `${prompt}\n\n---\n\nCONVERSATION TO ANALYZE:\n\n${conversationText}`;
+
+    // Track tokens
+    this.addTokens(this.estimateTokens(fullMessage));
+
+    // Store pending extraction context
+    this._pendingIntelligence = {
+      chatId: this.currentChatId,
+      promptUsed: this._intelligencePrompts.selected || 'default',
+      startedAt: Date.now()
+    };
+    this._intelligenceBuffer = '';
+
+    // Send via gateway to a dedicated session
+    this.request('chat.send', {
+      sessionKey: '__clawgpt_intelligence',
+      message: fullMessage,
+      deliver: false,
+      idempotencyKey: 'intel-' + this.currentChatId + '-' + Date.now()
+    }).catch(err => {
+      console.error('Intelligence extraction failed:', err);
+      this.handleIntelligenceError(err.message);
+    });
   }
 
-  extractIntelligence(messages) {
-    // Client-side extraction: parse messages for code blocks, URLs, questions,
-    // action-item patterns, and group by rough topic clusters.
-    // TODO: upgrade to AI-powered extraction via gateway
+  updateIntelligenceProgress(content) {
+    // Show partial progress while streaming
+    const results = this.elements.intelligenceResults;
+    const charCount = content.length;
+    results.innerHTML = `
+      <div class="intelligence-loading">
+        <div class="intelligence-spinner"></div>
+        <span>Analyzing... (${charCount} chars received)</span>
+      </div>
+    `;
+  }
 
-    const clusters = [];
-    const codeSnippets = [];
-    const allLinks = [];
-    const decisions = [];
-    const actionItems = [];
-    const keyPoints = [];
+  handleIntelligenceResponse(content) {
+    this.elements.intelligenceGenerateBtn.disabled = false;
 
-    const actionPatterns = /\b(TODO|FIXME|HACK|action item|will do|need to|should|must|let's|plan to|going to|i'll|we'll|next step|follow up|don't forget)\b/i;
-    const decisionPatterns = /\b(decided|decision|agreed|let's go with|we chose|the approach|settled on|going with|will use|chosen)\b/i;
-    const codeBlockRe = /```(\w*)\n([\s\S]*?)```/g;
-    const urlRe = /https?:\/\/[^\s<>"')\]]+/g;
+    if (!this._pendingIntelligence) return;
+    const { chatId, promptUsed } = this._pendingIntelligence;
+    this._pendingIntelligence = null;
 
-    for (const msg of messages) {
-      if (!msg.content || !msg.content.trim()) continue;
-      const text = msg.content;
+    const chat = this.chats[chatId];
+    if (!chat) return;
 
-      // Extract code blocks
-      let match;
-      codeBlockRe.lastIndex = 0;
-      while ((match = codeBlockRe.exec(text)) !== null) {
-        codeSnippets.push({
-          language: match[1] || 'text',
-          code: match[2].trim()
-        });
+    // Track response tokens
+    this.addTokens(this.estimateTokens(content));
+
+    // Parse JSON response
+    let files;
+    try {
+      // Try to extract JSON from the response (handle markdown fences)
+      let jsonStr = content.trim();
+      // Strip markdown code fences if present
+      if (jsonStr.startsWith('```')) {
+        jsonStr = jsonStr.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
       }
-
-      // Extract URLs
-      urlRe.lastIndex = 0;
-      while ((match = urlRe.exec(text)) !== null) {
-        const url = match[0].replace(/[.,;:!?)]+$/, '');
-        if (!allLinks.includes(url)) {
-          allLinks.push(url);
-        }
+      files = JSON.parse(jsonStr);
+      if (!Array.isArray(files)) {
+        files = [files]; // Wrap single object in array
       }
-
-      // Check for action items (line by line)
-      const lines = text.split('\n');
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-
-        if (actionPatterns.test(trimmed) && trimmed.length < 200) {
-          // Clean up the line
-          const cleaned = trimmed.replace(/^[-*•]\s*/, '').replace(/^#+\s*/, '');
-          if (cleaned.length > 10 && !actionItems.includes(cleaned)) {
-            actionItems.push(cleaned);
-          }
-        }
-
-        if (decisionPatterns.test(trimmed) && trimmed.length < 200) {
-          const cleaned = trimmed.replace(/^[-*•]\s*/, '').replace(/^#+\s*/, '');
-          if (cleaned.length > 10 && !decisions.includes(cleaned)) {
-            decisions.push(cleaned);
-          }
-        }
-      }
-
-      // Extract key points: sentences with substance from assistant messages
-      if (msg.role === 'assistant') {
-        const sentences = text
-          .replace(/```[\s\S]*?```/g, '') // Remove code blocks
-          .split(/[.!?]\s+/)
-          .map(s => s.trim())
-          .filter(s => s.length > 20 && s.length < 200);
-        for (const s of sentences.slice(0, 3)) {
-          keyPoints.push(s);
-        }
-      }
+    } catch (err) {
+      console.error('Failed to parse intelligence response:', err, content.substring(0, 200));
+      // Fallback: treat the whole response as a single markdown file
+      files = [{
+        filename: 'conversation-extract.md',
+        title: chat.title || 'Conversation Extract',
+        markdown: content
+      }];
     }
 
-    // Build topic clusters from message content
-    // Simple approach: group by conversation "phases" based on user messages
-    const topicMessages = [];
-    let currentTopic = null;
+    // Validate and clean files
+    files = files.map(f => ({
+      filename: f.filename || 'extract.md',
+      title: f.title || f.filename || 'Untitled',
+      markdown: f.markdown || f.content || ''
+    })).filter(f => f.markdown.trim().length > 0);
 
-    for (let i = 0; i < messages.length; i++) {
-      const msg = messages[i];
-      if (!msg.content || !msg.content.trim()) continue;
-
-      if (msg.role === 'user') {
-        // Start a new topic cluster with each user message
-        if (currentTopic) {
-          topicMessages.push(currentTopic);
-        }
-        const preview = msg.content.replace(/```[\s\S]*?```/g, '[code]').trim();
-        currentTopic = {
-          title: this.generateTopicTitle(preview),
-          userMessage: preview.substring(0, 300),
-          assistantPoints: [],
-          codeSnippets: [],
-          links: [],
-          decisions: [],
-          actionItems: []
-        };
-      } else if (msg.role === 'assistant' && currentTopic) {
-        const text = msg.content;
-
-        // Extract code blocks for this topic
-        codeBlockRe.lastIndex = 0;
-        let m;
-        while ((m = codeBlockRe.exec(text)) !== null) {
-          currentTopic.codeSnippets.push({
-            language: m[1] || 'text',
-            code: m[2].trim()
-          });
-        }
-
-        // Extract URLs for this topic
-        urlRe.lastIndex = 0;
-        while ((m = urlRe.exec(text)) !== null) {
-          const url = m[0].replace(/[.,;:!?)]+$/, '');
-          if (!currentTopic.links.includes(url)) {
-            currentTopic.links.push(url);
-          }
-        }
-
-        // Extract key points from assistant
-        const clean = text.replace(/```[\s\S]*?```/g, '').trim();
-        const sentences = clean.split(/[.!?]\s+/).filter(s => s.trim().length > 20 && s.trim().length < 200);
-        for (const s of sentences.slice(0, 5)) {
-          currentTopic.assistantPoints.push(s.trim());
-        }
-
-        // Check for decisions and actions
-        const textLines = text.split('\n');
-        for (const line of textLines) {
-          const trimmed = line.trim();
-          if (decisionPatterns.test(trimmed) && trimmed.length > 10 && trimmed.length < 200) {
-            currentTopic.decisions.push(trimmed.replace(/^[-*•]\s*/, ''));
-          }
-          if (actionPatterns.test(trimmed) && trimmed.length > 10 && trimmed.length < 200) {
-            currentTopic.actionItems.push(trimmed.replace(/^[-*•]\s*/, ''));
-          }
-        }
-      }
-    }
-    if (currentTopic) {
-      topicMessages.push(currentTopic);
+    if (files.length === 0) {
+      this.elements.intelligenceResults.innerHTML = '<div class="intelligence-empty"><p>No content extracted. Try adjusting the prompt.</p></div>';
+      return;
     }
 
-    // If there are very few topics, merge them or create a summary cluster
-    if (topicMessages.length === 0) {
-      topicMessages.push({
-        title: 'Conversation Summary',
-        userMessage: '',
-        assistantPoints: keyPoints.slice(0, 10),
-        codeSnippets: codeSnippets.slice(0, 5),
-        links: allLinks,
-        decisions: decisions.slice(0, 5),
-        actionItems: actionItems.slice(0, 5)
+    // Version management
+    if (!chat.intelligenceVersions) chat.intelligenceVersions = [];
+
+    const replaceMode = this.elements.intelligenceReplaceCheck.checked;
+    if (replaceMode && chat.intelligenceVersions.length > 0) {
+      // Replace latest version
+      chat.intelligenceVersions[chat.intelligenceVersions.length - 1] = {
+        version: chat.intelligenceVersions[chat.intelligenceVersions.length - 1].version,
+        timestamp: Date.now(),
+        promptUsed,
+        files
+      };
+    } else {
+      // Create new version
+      const newVersion = (chat.intelligenceVersions.length > 0)
+        ? chat.intelligenceVersions[chat.intelligenceVersions.length - 1].version + 1
+        : 1;
+      chat.intelligenceVersions.push({
+        version: newVersion,
+        timestamp: Date.now(),
+        promptUsed,
+        files
       });
     }
 
-    return {
-      clusters: topicMessages,
-      extractedAt: Date.now()
-    };
+    chat.intelligenceCurrentVersion = chat.intelligenceVersions[chat.intelligenceVersions.length - 1].version;
+
+    // Clean up old v1 intelligenceData if present
+    delete chat.intelligenceData;
+
+    this.saveChats();
+    this.showVersionControls(chat);
+    this.renderIntelligenceFiles(files);
   }
 
-  generateTopicTitle(userMessage) {
-    // Generate a short title from the user's message
-    const clean = userMessage
-      .replace(/\[code\]/g, '')
-      .replace(/\n/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    if (clean.length <= 50) return clean || 'Discussion';
-
-    // Try to find a natural break point
-    const cutoff = clean.substring(0, 50);
-    const lastSpace = cutoff.lastIndexOf(' ');
-    return (lastSpace > 20 ? cutoff.substring(0, lastSpace) : cutoff) + '...';
+  handleIntelligenceError(message) {
+    this.elements.intelligenceGenerateBtn.disabled = false;
+    this._pendingIntelligence = null;
+    this.elements.intelligenceResults.innerHTML = `
+      <div class="intelligence-empty">
+        <p style="color: var(--error-color, #f44);">Error: ${this.escapeHtml(message)}</p>
+        <p>Check gateway connection and try again.</p>
+      </div>
+    `;
   }
 
-  renderIntelligenceResults(data) {
-    const body = this.elements.intelligencePanelBody;
-    if (!data || !data.clusters || data.clusters.length === 0) {
-      body.innerHTML = '<div class="intelligence-empty"><p>No topics found in this conversation.</p></div>';
+  // --- Rendering ---
+
+  renderIntelligenceFiles(files) {
+    const results = this.elements.intelligenceResults;
+    if (!files || files.length === 0) {
+      results.innerHTML = '<div class="intelligence-empty"><p>No files generated.</p></div>';
+      this.elements.intelligenceFooter.style.display = 'none';
       return;
     }
 
     let html = '';
-    data.clusters.forEach((cluster, idx) => {
-      const hasContent = cluster.assistantPoints.length > 0 ||
-        cluster.codeSnippets.length > 0 ||
-        cluster.links.length > 0 ||
-        cluster.decisions.length > 0 ||
-        cluster.actionItems.length > 0;
-
-      if (!hasContent && !cluster.userMessage) return;
-
-      html += `<div class="intelligence-card" data-cluster-idx="${idx}">`;
+    files.forEach((file, idx) => {
+      html += `<div class="intelligence-card" data-file-idx="${idx}">`;
       html += `<div class="intelligence-card-header" data-action="toggle-card">`;
-      html += `<span class="intelligence-card-title">${this.escapeHtml(cluster.title)}</span>`;
+      html += `<span class="intelligence-card-icon">📄</span>`;
+      html += `<span class="intelligence-card-title">${this.escapeHtml(file.filename)}</span>`;
       html += `<span class="intelligence-card-toggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg></span>`;
       html += `</div>`;
       html += `<div class="intelligence-card-body">`;
 
-      if (cluster.assistantPoints.length > 0) {
-        html += `<div class="intelligence-section">`;
-        html += `<div class="intelligence-section-label">Key Points</div>`;
-        html += `<ul>`;
-        for (const p of cluster.assistantPoints.slice(0, 8)) {
-          html += `<li>${this.escapeHtml(p)}</li>`;
-        }
-        html += `</ul></div>`;
-      }
-
-      if (cluster.decisions.length > 0) {
-        html += `<div class="intelligence-section decisions">`;
-        html += `<div class="intelligence-section-label">Decisions</div>`;
-        html += `<ul>`;
-        for (const d of cluster.decisions.slice(0, 5)) {
-          html += `<li>${this.escapeHtml(d)}</li>`;
-        }
-        html += `</ul></div>`;
-      }
-
-      if (cluster.actionItems.length > 0) {
-        html += `<div class="intelligence-section action-items">`;
-        html += `<div class="intelligence-section-label">Action Items</div>`;
-        html += `<ul>`;
-        for (const a of cluster.actionItems.slice(0, 5)) {
-          html += `<li>${this.escapeHtml(a)}</li>`;
-        }
-        html += `</ul></div>`;
-      }
-
-      if (cluster.codeSnippets.length > 0) {
-        html += `<div class="intelligence-section">`;
-        html += `<div class="intelligence-section-label">Code Snippets</div>`;
-        for (const cs of cluster.codeSnippets.slice(0, 3)) {
-          const langClass = cs.language ? `language-${cs.language}` : '';
-          html += `<div class="intelligence-code-snippet">`;
-          html += `<pre><code class="${langClass}">${this.escapeHtml(cs.code)}</code></pre>`;
-          html += `</div>`;
-        }
-        html += `</div>`;
-      }
-
-      if (cluster.links.length > 0) {
-        html += `<div class="intelligence-section">`;
-        html += `<div class="intelligence-section-label">Links</div>`;
-        html += `<ul class="intelligence-links">`;
-        for (const link of cluster.links) {
-          const display = link.length > 60 ? link.substring(0, 57) + '...' : link;
-          html += `<li><a href="${this.escapeHtml(link)}" target="_blank" rel="noopener noreferrer">${this.escapeHtml(display)}</a></li>`;
-        }
-        html += `</ul></div>`;
-      }
+      // Render the markdown content as HTML
+      const rendered = this.renderMarkdownSimple(file.markdown);
+      html += `<div class="intelligence-file-content">${rendered}</div>`;
 
       // Card actions
       html += `<div class="intelligence-card-actions">`;
-      html += `<button class="intelligence-card-action-btn" data-action="copy-card" data-idx="${idx}" title="Copy as markdown">`;
+      html += `<button class="intelligence-card-action-btn" data-action="copy-card" data-idx="${idx}" title="Copy markdown">`;
       html += `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
       html += `Copy</button>`;
-      html += `<button class="intelligence-card-action-btn" data-action="download-card" data-idx="${idx}" title="Download as markdown">`;
+      html += `<button class="intelligence-card-action-btn" data-action="download-card" data-idx="${idx}" title="Download .md file">`;
       html += `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
       html += `Download</button>`;
       html += `</div>`;
@@ -7019,126 +7098,126 @@ Title:`;
       html += `</div></div>`;
     });
 
-    body.innerHTML = html;
+    results.innerHTML = html;
+    this.elements.intelligenceFooter.style.display = files.length > 0 ? 'flex' : 'none';
 
     // Syntax highlight code snippets
-    body.querySelectorAll('pre code[class*="language-"]').forEach(el => {
-      if (typeof Prism !== 'undefined') {
-        Prism.highlightElement(el);
-      }
+    results.querySelectorAll('pre code[class*="language-"]').forEach(el => {
+      if (typeof Prism !== 'undefined') Prism.highlightElement(el);
     });
 
-    // Set up event delegation once
+    // Event delegation for card actions
     if (!this._intelligenceClickBound) {
       this._intelligenceClickBound = true;
-      body.addEventListener('click', (e) => {
+      results.addEventListener('click', (e) => {
         const toggleHeader = e.target.closest('[data-action="toggle-card"]');
         if (toggleHeader) {
-          const card = toggleHeader.closest('.intelligence-card');
-          card.classList.toggle('collapsed');
+          toggleHeader.closest('.intelligence-card').classList.toggle('collapsed');
           return;
         }
-
         const copyBtn = e.target.closest('[data-action="copy-card"]');
         if (copyBtn) {
-          const idx = parseInt(copyBtn.dataset.idx);
-          this.copyIntelligenceCard(idx, copyBtn);
+          this.copyIntelligenceFile(parseInt(copyBtn.dataset.idx), copyBtn);
           return;
         }
-
         const downloadBtn = e.target.closest('[data-action="download-card"]');
         if (downloadBtn) {
-          const idx = parseInt(downloadBtn.dataset.idx);
-          this.downloadIntelligenceCard(idx);
+          this.downloadIntelligenceFile(parseInt(downloadBtn.dataset.idx));
           return;
         }
       });
     }
   }
 
-  clusterToMarkdown(cluster) {
-    let md = `## ${cluster.title}\n\n`;
-
-    if (cluster.assistantPoints.length > 0) {
-      md += `### Key Points\n`;
-      for (const p of cluster.assistantPoints) {
-        md += `- ${p}\n`;
-      }
-      md += '\n';
-    }
-
-    if (cluster.decisions.length > 0) {
-      md += `### Decisions\n`;
-      for (const d of cluster.decisions) {
-        md += `- ${d}\n`;
-      }
-      md += '\n';
-    }
-
-    if (cluster.actionItems.length > 0) {
-      md += `### Action Items\n`;
-      for (const a of cluster.actionItems) {
-        md += `- [ ] ${a}\n`;
-      }
-      md += '\n';
-    }
-
-    if (cluster.codeSnippets.length > 0) {
-      md += `### Code Snippets\n`;
-      for (const cs of cluster.codeSnippets) {
-        md += `\`\`\`${cs.language}\n${cs.code}\n\`\`\`\n\n`;
-      }
-    }
-
-    if (cluster.links.length > 0) {
-      md += `### Links\n`;
-      for (const link of cluster.links) {
-        md += `- ${link}\n`;
-      }
-      md += '\n';
-    }
-
-    return md;
+  renderMarkdownSimple(md) {
+    // Simple markdown to HTML renderer (no dependencies)
+    let html = this.escapeHtml(md);
+    // Headers
+    html = html.replace(/^### (.+)$/gm, '<h4>$1</h4>');
+    html = html.replace(/^## (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^# (.+)$/gm, '<h2>$1</h2>');
+    // Bold
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    // Inline code
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // Code blocks (```lang\n...\n```)
+    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+      const cls = lang ? ` class="language-${lang}"` : '';
+      return `<pre><code${cls}>${code}</code></pre>`;
+    });
+    // Lists
+    html = html.replace(/^- \[ \] (.+)$/gm, '<li class="task">☐ $1</li>');
+    html = html.replace(/^- \[x\] (.+)$/gm, '<li class="task done">☑ $1</li>');
+    html = html.replace(/^[-*] (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/(<li.*<\/li>\n?)+/g, '<ul>$&</ul>');
+    // Links
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    // Paragraphs (double newlines)
+    html = html.replace(/\n\n/g, '</p><p>');
+    html = '<p>' + html + '</p>';
+    // Clean up empty paragraphs
+    html = html.replace(/<p>\s*<\/p>/g, '');
+    // Fix headers inside paragraphs
+    html = html.replace(/<p>(<h[234]>)/g, '$1');
+    html = html.replace(/(<\/h[234]>)<\/p>/g, '$1');
+    // Fix pre inside paragraphs
+    html = html.replace(/<p>(<pre>)/g, '$1');
+    html = html.replace(/(<\/pre>)<\/p>/g, '$1');
+    // Fix ul inside paragraphs
+    html = html.replace(/<p>(<ul>)/g, '$1');
+    html = html.replace(/(<\/ul>)<\/p>/g, '$1');
+    return html;
   }
 
-  copyIntelligenceCard(idx, btn) {
-    const chat = this.chats[this.currentChatId];
-    if (!chat || !chat.intelligenceData) return;
-    const cluster = chat.intelligenceData.clusters[idx];
-    if (!cluster) return;
+  // --- Copy / Download ---
 
-    const md = this.clusterToMarkdown(cluster);
-    navigator.clipboard.writeText(md).then(() => {
+  copyIntelligenceFile(idx, btn) {
+    const chat = this.chats[this.currentChatId];
+    if (!chat?.intelligenceVersions) return;
+    const ver = chat.intelligenceCurrentVersion || chat.intelligenceVersions.length;
+    const version = chat.intelligenceVersions.find(v => v.version === ver);
+    if (!version || !version.files[idx]) return;
+
+    navigator.clipboard.writeText(version.files[idx].markdown).then(() => {
       btn.classList.add('copied');
-      setTimeout(() => btn.classList.remove('copied'), 1500);
+      const origText = btn.innerHTML;
+      btn.innerHTML = btn.innerHTML.replace('Copy', 'Copied!');
+      setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = origText; }, 1500);
     });
   }
 
-  downloadIntelligenceCard(idx) {
+  downloadIntelligenceFile(idx) {
     const chat = this.chats[this.currentChatId];
-    if (!chat || !chat.intelligenceData) return;
-    const cluster = chat.intelligenceData.clusters[idx];
-    if (!cluster) return;
+    if (!chat?.intelligenceVersions) return;
+    const ver = chat.intelligenceCurrentVersion || chat.intelligenceVersions.length;
+    const version = chat.intelligenceVersions.find(v => v.version === ver);
+    if (!version || !version.files[idx]) return;
 
-    const md = this.clusterToMarkdown(cluster);
-    const filename = cluster.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase().substring(0, 40) + '.md';
-    this.downloadFile(filename, md, 'text/markdown');
+    const file = version.files[idx];
+    this.downloadFile(file.filename, file.markdown, 'text/markdown');
   }
 
   downloadAllIntelligence() {
     const chat = this.chats[this.currentChatId];
-    if (!chat || !chat.intelligenceData) return;
+    if (!chat?.intelligenceVersions) return;
+    const ver = chat.intelligenceCurrentVersion || chat.intelligenceVersions.length;
+    const version = chat.intelligenceVersions.find(v => v.version === ver);
+    if (!version) return;
 
-    const chatTitle = (chat.title || 'conversation').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-    let md = `# Conversation Intelligence: ${chat.title || 'Untitled'}\n\n`;
-    md += `_Extracted: ${new Date(chat.intelligenceData.extractedAt).toLocaleString()}_\n\n---\n\n`;
-
-    for (const cluster of chat.intelligenceData.clusters) {
-      md += this.clusterToMarkdown(cluster);
-      md += '---\n\n';
+    if (version.files.length === 1) {
+      // Single file — download directly
+      const f = version.files[0];
+      this.downloadFile(f.filename, f.markdown, 'text/markdown');
+    } else {
+      // Multiple files — combine into one with separators
+      const chatTitle = (chat.title || 'conversation').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+      let combined = `# Intelligence Extract: ${chat.title || 'Untitled'}\n`;
+      combined += `_Generated: ${new Date(version.timestamp).toLocaleString()}_\n\n`;
+      for (const f of version.files) {
+        combined += `---\n\n_File: ${f.filename}_\n\n${f.markdown}\n\n`;
+      }
+      this.downloadFile(`intelligence-${chatTitle}.md`, combined, 'text/markdown');
     }
-
-    this.downloadFile(`intelligence-${chatTitle}.md`, md, 'text/markdown');
   }
 
   downloadFile(filename, content, mimeType) {

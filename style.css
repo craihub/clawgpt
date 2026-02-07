@@ -3253,8 +3253,6 @@ body {
   flex-shrink: 0;
 }
 
-.intelligence-refresh-btn,
-.intelligence-download-all-btn,
 .intelligence-close-btn {
   background: none;
   border: none;
@@ -3268,19 +3266,11 @@ body {
   transition: all 0.15s;
 }
 
-.intelligence-refresh-btn:hover,
-.intelligence-download-all-btn:hover {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-}
-
 .intelligence-close-btn:hover {
   background: var(--bg-tertiary);
   color: #ef4444;
 }
 
-.intelligence-refresh-btn svg,
-.intelligence-download-all-btn svg,
 .intelligence-close-btn svg {
   width: 16px;
   height: 16px;
@@ -3290,19 +3280,303 @@ body {
 .intelligence-panel-body {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  display: flex;
+  flex-direction: column;
   -webkit-overflow-scrolling: touch;
+}
+
+/* Controls section */
+.intelligence-controls {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.intelligence-prompt-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.intelligence-prompt-select {
+  flex: 1;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.intelligence-prompt-view-btn {
+  background: none;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 5px 8px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.intelligence-prompt-view-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.intelligence-prompt-editor {
+  margin-bottom: 10px;
+}
+
+.intelligence-prompt-textarea {
+  width: 100%;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: 'SF Mono', Monaco, 'Consolas', monospace;
+  line-height: 1.5;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.intelligence-prompt-editor-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  align-items: center;
+}
+
+.intelligence-prompt-name-input {
+  flex: 1;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.intelligence-prompt-save-btn,
+.intelligence-prompt-cancel-btn {
+  background: none;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+
+.intelligence-prompt-save-btn:hover {
+  background: var(--accent-color);
+  color: white;
+  border-color: var(--accent-color);
+}
+
+.intelligence-prompt-cancel-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.intelligence-info {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.intelligence-generate-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.intelligence-generate-btn {
+  background: var(--accent-color);
+  color: white;
+  border: none;
+  cursor: pointer;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s;
+}
+
+.intelligence-generate-btn:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.intelligence-generate-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.intelligence-generate-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.intelligence-version-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.intelligence-version-select {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.intelligence-replace-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.intelligence-replace-label input[type="checkbox"] {
+  accent-color: var(--accent-color);
+}
+
+/* Results area */
+.intelligence-results {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
 }
 
 .intelligence-empty {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
+  min-height: 120px;
   color: var(--text-muted);
   font-size: 14px;
   text-align: center;
   padding: 24px;
+}
+
+/* Footer */
+.intelligence-footer {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.intelligence-download-all-btn {
+  background: none;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s;
+}
+
+.intelligence-download-all-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.intelligence-download-all-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* File content rendering */
+.intelligence-file-content {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.intelligence-file-content h2 {
+  font-size: 15px;
+  margin: 12px 0 6px;
+  color: var(--text-primary);
+}
+
+.intelligence-file-content h3 {
+  font-size: 14px;
+  margin: 10px 0 4px;
+  color: var(--text-primary);
+}
+
+.intelligence-file-content h4 {
+  font-size: 13px;
+  margin: 8px 0 4px;
+  color: var(--text-primary);
+}
+
+.intelligence-file-content ul {
+  padding-left: 18px;
+  margin: 4px 0;
+}
+
+.intelligence-file-content li {
+  margin: 2px 0;
+}
+
+.intelligence-file-content li.task {
+  list-style: none;
+  margin-left: -18px;
+}
+
+.intelligence-file-content pre {
+  background: #2d2d2d;
+  border-radius: 6px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  margin: 6px 0;
+}
+
+[data-theme="light"] .intelligence-file-content pre {
+  background: #f5f5f5;
+}
+
+.intelligence-file-content code {
+  font-family: 'SF Mono', Monaco, 'Consolas', monospace;
+  font-size: 12px;
+}
+
+.intelligence-file-content p code {
+  background: var(--bg-tertiary);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.intelligence-card-icon {
+  margin-right: 6px;
+  flex-shrink: 0;
 }
 
 /* Loading spinner */
@@ -3387,101 +3661,7 @@ body {
   display: none;
 }
 
-/* Card sections */
-.intelligence-section {
-  margin-bottom: 12px;
-}
-
-.intelligence-section:last-child {
-  margin-bottom: 0;
-}
-
-.intelligence-section-label {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-muted);
-  margin-bottom: 6px;
-}
-
-.intelligence-section ul {
-  list-style: none;
-  padding: 0;
-}
-
-.intelligence-section li {
-  padding: 3px 0;
-  padding-left: 14px;
-  position: relative;
-  color: var(--text-secondary);
-}
-
-.intelligence-section li::before {
-  content: '•';
-  position: absolute;
-  left: 0;
-  color: var(--accent-color);
-}
-
-/* Action items get a special style */
-.intelligence-section.action-items li::before {
-  content: '☐';
-  color: var(--accent-color);
-}
-
-/* Decisions */
-.intelligence-section.decisions li::before {
-  content: '→';
-  color: #818cf8;
-}
-
-/* Code snippets in cards */
-.intelligence-code-snippet {
-  margin: 6px 0;
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.intelligence-code-snippet pre {
-  margin: 0;
-  padding: 10px 12px;
-  font-size: 12px;
-  background: #2d2d2d;
-  border-radius: 6px;
-  overflow-x: auto;
-}
-
-[data-theme="light"] .intelligence-code-snippet pre {
-  background: #f5f5f5;
-}
-
-.intelligence-code-snippet pre code {
-  font-family: 'SF Mono', Monaco, 'Consolas', 'Courier New', monospace;
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-/* Links in cards */
-.intelligence-links {
-  list-style: none;
-  padding: 0;
-}
-
-.intelligence-links li {
-  padding: 3px 0;
-}
-
-.intelligence-links a {
-  color: var(--accent-color);
-  text-decoration: none;
-  font-size: 13px;
-  word-break: break-all;
-}
-
-.intelligence-links a:hover {
-  text-decoration: underline;
-}
+/* (v1 section styles removed — replaced by file content rendering) */
 
 /* Card action buttons */
 .intelligence-card-actions {
