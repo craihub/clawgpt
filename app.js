@@ -9388,13 +9388,27 @@ If multiple files, return multiple objects in the array.`;
       // Browser TTS for full response
       this.speakWithBrowserTts(finalContent);
     }
+
+    // If audio queue is already empty (all chunks played or no chunks were sent),
+    // trigger done immediately — otherwise onAudioQueueEmpty will handle it
+    setTimeout(() => {
+      if (this._talkStreamingComplete && this.audioQueue && !this.audioQueue.isPlaying && this.audioQueue.queue.length === 0) {
+        console.log('[TalkMode] Stream ended and queue already empty — triggering done');
+        this.onTtsDone();
+      }
+    }, 500);
   }
 
   bufferForStreamingTts(fullContent) {
     // fullContent is the accumulated stream so far
     // Find new text since last buffer point
-    const newText = fullContent.substring(this._lastTtsBufferPos || 0);
+    let newText = fullContent.substring(this._lastTtsBufferPos || 0);
     this._lastTtsBufferPos = fullContent.length;
+
+    // Skip tool calls, code blocks, and non-speech content
+    if (newText.includes('```') || newText.includes('<') || newText.includes('function_calls')) {
+      return; // Don't speak code/tool calls
+    }
 
     this._talkSentenceBuffer += newText;
 
@@ -9423,16 +9437,24 @@ If multiple files, return multiple objects in the array.`;
   async speakWithElevenLabs(text) {
     if (!text || !this.elevenlabsApiKey) return;
 
-    // Strip markdown formatting for cleaner speech
+    // Strip markdown, code, tool calls, and other non-speech content
     const cleanText = text
-      .replace(/```[\s\S]*?```/g, ' code block ')
-      .replace(/`([^`]+)`/g, '$1')
-      .replace(/\*\*([^*]+)\*\*/g, '$1')
-      .replace(/\*([^*]+)\*/g, '$1')
-      .replace(/#+\s/g, '')
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/```[\s\S]*?```/g, '')           // code blocks
+      .replace(/<[^>]+>/g, '')                   // HTML/XML tags
+      .replace(/\{[^}]{20,}\}/g, '')             // JSON objects
+      .replace(/`([^`]+)`/g, '$1')               // inline code
+      .replace(/\*\*([^*]+)\*\*/g, '$1')         // bold
+      .replace(/\*([^*]+)\*/g, '$1')             // italic
+      .replace(/#+\s/g, '')                      // headers
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')   // links
+      .replace(/https?:\/\/\S+/g, '')            // URLs
+      .replace(/\|[^|]+\|/g, '')                 // table cells
+      .replace(/[-=]{3,}/g, '')                  // horizontal rules
+      .replace(/^\s*[-*+]\s/gm, '')              // list markers
+      .replace(/^\s*\d+\.\s/gm, '')              // numbered lists
       .replace(/\n{2,}/g, '. ')
       .replace(/\n/g, ' ')
+      .replace(/\s{2,}/g, ' ')
       .trim();
 
     if (!cleanText) return;
