@@ -2525,8 +2525,16 @@ window.CLAWGPT_CONFIG = {
       workspaceEditor: document.getElementById('workspaceEditor'),
       workspaceEditorTextarea: document.getElementById('workspaceEditorTextarea'),
       workspaceEditorSaveBtn: document.getElementById('workspaceEditorSaveBtn'),
-      workspaceEditorCancelBtn: document.getElementById('workspaceEditorCancelBtn')
+      workspaceEditorCancelBtn: document.getElementById('workspaceEditorCancelBtn'),
+      sessionsBtn: document.getElementById('sessionsBtn'),
+      sessionDashboard: document.getElementById('sessionDashboard'),
+      sessionDashboardClose: document.getElementById('sessionDashboardClose'),
+      sessionDashboardBody: document.getElementById('sessionDashboardBody')
     };
+
+    // Session dashboard state
+    this.sessionDashboardOpen = false;
+    this.sessionRefreshInterval = null;
 
     // Models list (fetched on connect)
     this.availableModels = [];
@@ -2647,6 +2655,14 @@ window.CLAWGPT_CONFIG = {
     this.elements.settingsBtn.addEventListener('click', () => this.openSettings());
     this.elements.closeSettings.addEventListener('click', () => this.closeSettings());
     this.elements.connectBtn.addEventListener('click', () => this.connect());
+
+    // Session dashboard
+    if (this.elements.sessionsBtn) {
+      this.elements.sessionsBtn.addEventListener('click', () => this.toggleSessionDashboard());
+    }
+    if (this.elements.sessionDashboardClose) {
+      this.elements.sessionDashboardClose.addEventListener('click', () => this.closeSessionDashboard());
+    }
 
     // Help/shortcuts modal
     if (this.elements.helpBtn) {
@@ -3249,6 +3265,159 @@ window.CLAWGPT_CONFIG = {
     if (this.elements.shortcutsModal) {
       this.elements.shortcutsModal.classList.remove('open');
     }
+  }
+
+  // Session Dashboard methods
+  async toggleSessionDashboard() {
+    if (this.sessionDashboardOpen) {
+      this.closeSessionDashboard();
+    } else {
+      this.openSessionDashboard();
+    }
+  }
+
+  async openSessionDashboard() {
+    this.sessionDashboardOpen = true;
+    if (this.elements.sessionDashboard) {
+      this.elements.sessionDashboard.style.display = 'flex';
+    }
+    await this.loadSessionList();
+
+    // Start auto-refresh every 30 seconds
+    if (this.sessionRefreshInterval) {
+      clearInterval(this.sessionRefreshInterval);
+    }
+    this.sessionRefreshInterval = setInterval(() => {
+      if (this.sessionDashboardOpen) {
+        this.loadSessionList();
+      }
+    }, 30000);
+  }
+
+  closeSessionDashboard() {
+    this.sessionDashboardOpen = false;
+    if (this.elements.sessionDashboard) {
+      this.elements.sessionDashboard.style.display = 'none';
+    }
+
+    // Stop auto-refresh
+    if (this.sessionRefreshInterval) {
+      clearInterval(this.sessionRefreshInterval);
+      this.sessionRefreshInterval = null;
+    }
+  }
+
+  async loadSessionList() {
+    if (!this.elements.sessionDashboardBody) return;
+
+    try {
+      // Show loading state
+      this.elements.sessionDashboardBody.innerHTML = '<div class="session-loading">Loading sessions...</div>';
+
+      // Request session list from gateway
+      const result = await this.request('sessions.list', {});
+
+      if (!result.sessions || result.sessions.length === 0) {
+        this.elements.sessionDashboardBody.innerHTML = '<div class="session-empty">No sessions found</div>';
+        return;
+      }
+
+      // Render session cards
+      this.renderSessionCards(result.sessions);
+    } catch (error) {
+      console.error('Failed to load sessions:', error);
+      this.elements.sessionDashboardBody.innerHTML = '<div class="session-error">Failed to load sessions</div>';
+    }
+  }
+
+  renderSessionCards(sessions) {
+    if (!this.elements.sessionDashboardBody) return;
+
+    const html = sessions.map(session => {
+      const isActive = session.key === this.sessionKey;
+      const statusClass = session.active ? 'active' : 'idle';
+      const lastMessage = session.lastMessage || 'No messages';
+      const preview = this.truncateText(lastMessage, 80);
+      const tokens = session.tokens ? `${session.tokens.toLocaleString()} tokens` : '';
+
+      return `
+        <div class="session-card ${isActive ? 'active' : ''}" data-session-key="${this.escapeHtml(session.key)}">
+          <div class="session-card-header">
+            <div class="session-card-name">
+              <span class="session-status-indicator ${statusClass}"></span>
+              ${this.escapeHtml(session.key)}
+            </div>
+            <div class="session-card-model">${this.escapeHtml(session.model || 'unknown')}</div>
+          </div>
+          <div class="session-card-body">
+            <div class="session-card-preview">${this.escapeHtml(preview)}</div>
+          </div>
+          <div class="session-card-footer">
+            <div class="session-card-tokens">${tokens}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    this.elements.sessionDashboardBody.innerHTML = html;
+
+    // Add click handlers for session cards
+    this.elements.sessionDashboardBody.querySelectorAll('.session-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const sessionKey = card.dataset.sessionKey;
+        this.switchSession(sessionKey);
+      });
+    });
+  }
+
+  async switchSession(sessionKey) {
+    if (sessionKey === this.sessionKey) {
+      // Already on this session, just close dashboard
+      this.closeSessionDashboard();
+      return;
+    }
+
+    try {
+      // Update session key
+      this.sessionKey = sessionKey;
+
+      // Save to settings
+      this.saveSettings();
+
+      // Update UI
+      if (this.elements.sessionKeyInput) {
+        this.elements.sessionKeyInput.value = sessionKey;
+      }
+
+      // Clear current chat
+      this.currentChatId = null;
+      this.lastGatewayChat = null;
+
+      // Create a new chat for this session
+      this.newChat();
+
+      // Close dashboard
+      this.closeSessionDashboard();
+
+      // Load history for new session
+      await this.loadHistory();
+
+      console.log('Switched to session:', sessionKey);
+    } catch (error) {
+      console.error('Failed to switch session:', error);
+      this.showToast('Failed to switch session', 'error');
+    }
+  }
+
+  truncateText(text, maxLength) {
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
+  }
+
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   saveAndCloseSettings() {

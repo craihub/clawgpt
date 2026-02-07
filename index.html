@@ -57,6 +57,15 @@
         <!-- Chat history items go here -->
       </div>
       <div class="sidebar-footer">
+        <button class="sessions-btn" id="sessionsBtn" title="View all sessions">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+          </svg>
+          <span class="btn-text">Sessions</span>
+        </button>
         <button class="settings-btn" id="settingsBtn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="3"></circle>
@@ -80,6 +89,22 @@
         </button>
       </div>
     </aside>
+
+    <!-- Session Dashboard Overlay -->
+    <div class="session-dashboard" id="sessionDashboard" style="display: none;">
+      <div class="session-dashboard-header">
+        <h2>Sessions</h2>
+        <button class="session-dashboard-close" id="sessionDashboardClose">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="session-dashboard-body" id="sessionDashboardBody">
+        <!-- Session cards will be rendered here -->
+      </div>
+    </div>
 
     <!-- Main chat area -->
     <main class="main">
