@@ -6109,6 +6109,7 @@ Example: [0, 2, 5]`;
     this.streamBuffer = '';
     this.updateStreamingUI();
     this.renderMessages();
+    this.scrollToBottom();
 
     try {
       // Check if we're switching to a different chat
