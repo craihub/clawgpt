@@ -8850,12 +8850,47 @@ If multiple files, return multiple objects in the array.`;
     this._talkInterimTranscript = '';
     this._talkMicDenied = false;
 
+    this._talkRecognition.onstart = () => {
+      console.log('[TalkMode] Recognition started');
+    };
+
+    this._talkRecognition.onaudiostart = () => {
+      console.log('[TalkMode] Audio capture started');
+    };
+
+    this._talkRecognition.onsoundstart = () => {
+      console.log('[TalkMode] Sound detected');
+    };
+
+    this._talkRecognition.onspeechstart = () => {
+      console.log('[TalkMode] Speech detected');
+    };
+
+    this._talkRecognition.onspeechend = () => {
+      console.log('[TalkMode] Speech ended');
+    };
+
+    this._talkRecognition.onsoundend = () => {
+      console.log('[TalkMode] Sound ended');
+    };
+
+    this._talkRecognition.onaudioend = () => {
+      console.log('[TalkMode] Audio capture ended');
+    };
+
+    this._talkSendTimer = null;
+
     this._talkRecognition.onresult = (event) => {
+      console.log('[TalkMode] onresult fired, resultIndex:', event.resultIndex, 'results length:', event.results.length);
       let interim = '';
+      let gotFinal = false;
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const t = event.results[i][0].transcript;
+        const confidence = event.results[i][0].confidence;
+        console.log('[TalkMode] Result', i, 'isFinal:', event.results[i].isFinal, 'transcript:', JSON.stringify(t), 'confidence:', confidence);
         if (event.results[i].isFinal) {
           this._talkFinalTranscript += t;
+          gotFinal = true;
         } else {
           interim += t;
         }
@@ -8865,36 +8900,77 @@ If multiple files, return multiple objects in the array.`;
       if (this._talkFinalTranscript || interim) {
         this.setTalkStatus('🎙️ ' + (this._talkFinalTranscript + interim).slice(-60));
       }
+
+      // When we get a final result, start a debounce timer to send
+      // This handles the case where continuous=true keeps recognition alive
+      if (gotFinal && this._talkFinalTranscript.trim()) {
+        clearTimeout(this._talkSendTimer);
+        this._talkSendTimer = setTimeout(() => {
+          // Only send if we still have a transcript and aren't already waiting
+          if (this._talkFinalTranscript.trim() && !this._talkWaitingForResponse) {
+            console.log('[TalkMode] Debounce timer fired, sending transcript');
+            const text = this._talkFinalTranscript.trim();
+            this._talkFinalTranscript = '';
+            this._talkInterimTranscript = '';
+            // Stop recognition while we wait for response
+            try { this._talkRecognition.stop(); } catch {}
+            this.sendTalkMessage(text);
+          }
+        }, 1500); // 1.5s of silence after last final result = send
+      }
     };
 
     this._talkRecognition.onend = () => {
-      // In hands-free mode, restart if we're still in talk mode and have a transcript to send
-      if (this._talkFinalTranscript.trim()) {
+      console.log('[TalkMode] Recognition ended. finalTranscript:', JSON.stringify(this._talkFinalTranscript), 'state:', this.talkModeState, 'handsfree:', this.talkModeHandsfree, 'waitingForResponse:', this._talkWaitingForResponse);
+      
+      // Clear any pending send timer — we'll handle the transcript directly
+      clearTimeout(this._talkSendTimer);
+      
+      // If we have accumulated transcript, send it now
+      if (this._talkFinalTranscript.trim() && !this._talkWaitingForResponse) {
         this.sendTalkMessage(this._talkFinalTranscript.trim());
         this._talkFinalTranscript = '';
         this._talkInterimTranscript = '';
-      } else if (this.talkModeActive && this.talkModeHandsfree && !this._talkMicDenied && this.talkModeState !== 'thinking' && this.talkModeState !== 'speaking') {
+      } else if (this.talkModeActive && this.talkModeHandsfree && !this._talkMicDenied && this.talkModeState !== 'thinking' && this.talkModeState !== 'speaking' && !this._talkWaitingForResponse) {
         // Restart listening in hands-free mode
         this.startTalkListening();
       }
     };
 
+    this._talkNetworkRetries = 0;
     this._talkRecognition.onerror = (event) => {
+      console.error('[TalkMode] Recognition error:', event.error, 'message:', event.message);
       if (event.error === 'aborted' || event.error === 'no-speech') {
         // These are normal — restart in hands-free
+        this._talkNetworkRetries = 0;
         if (this.talkModeActive && this.talkModeHandsfree && !this._talkMicDenied && this.talkModeState !== 'thinking' && this.talkModeState !== 'speaking') {
           setTimeout(() => this.startTalkListening(), 300);
+        }
+        return;
+      }
+      if (event.error === 'network') {
+        // Network error reaching Google speech service — retry with backoff
+        this._talkNetworkRetries++;
+        console.warn('[TalkMode] Network error, retry', this._talkNetworkRetries);
+        if (this._talkNetworkRetries <= 5 && this.talkModeActive) {
+          const delay = Math.min(1000 * this._talkNetworkRetries, 3000);
+          this.setTalkStatus('🔄 Speech service connection issue, retrying...');
+          setTimeout(() => {
+            if (this.talkModeActive) this.startTalkListening();
+          }, delay);
+        } else {
+          this.setTalkStatus('❌ Speech service unavailable — check network');
         }
         return;
       }
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
         // Mic permission denied — prevent retry loop
         this._talkMicDenied = true;
-        console.warn('Talk mode: microphone access denied');
+        console.warn('[TalkMode] Microphone access denied');
         this.setTalkStatus('🎙️ Microphone access denied — check permissions');
         return;
       }
-      console.error('Talk mode recognition error:', event.error);
+      console.error('[TalkMode] Recognition error:', event.error);
       this.setTalkStatus('Error: ' + event.error);
     };
 
@@ -8970,14 +9046,16 @@ If multiple files, return multiple objects in the array.`;
 
   startTalkListening() {
     if (!this.talkModeActive) return;
+    console.log('[TalkMode] startTalkListening called');
     this._talkMicDenied = false;
     this._talkFinalTranscript = '';
     this._talkInterimTranscript = '';
     this.setTalkState('listening');
     try {
       this._talkRecognition.start();
-    } catch {
-      // Already started
+      console.log('[TalkMode] recognition.start() called successfully');
+    } catch (e) {
+      console.warn('[TalkMode] recognition.start() error:', e.message);
     }
   }
 
@@ -8989,6 +9067,7 @@ If multiple files, return multiple objects in the array.`;
   }
 
   sendTalkMessage(text) {
+    console.log('[TalkMode] sendTalkMessage called with:', JSON.stringify(text), 'connected:', this.connected);
     if (!text.trim() || !this.connected) return;
 
     // Add to transcript
@@ -9033,6 +9112,7 @@ If multiple files, return multiple objects in the array.`;
   }
 
   handleTalkModeResponse(text) {
+    console.log('[TalkMode] handleTalkModeResponse called, waitingForResponse:', this._talkWaitingForResponse, 'active:', this.talkModeActive, 'text length:', text?.length);
     if (!this._talkWaitingForResponse || !this.talkModeActive) return;
     this._talkWaitingForResponse = false;
 
