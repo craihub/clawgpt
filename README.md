@@ -150,14 +150,19 @@ That's it. OpenClaw will handle the rest.
    - **Mac/Linux:** `~/clawgpt/`
    - **Windows:** `C:\Users\YourName\clawgpt\`
 
-3. Start the web server (in the clawgpt folder):
+3. Allow ClawGPT to connect to your gateway:
+   ```bash
+   openclaw config set gateway.controlUi.allowedOrigins '["http://localhost:8080"]'
+   ```
+
+4. Start the web server (in the clawgpt folder):
    ```bash
    python3 -m http.server 8080
    ```
 
-4. Open http://localhost:8080
+5. Open http://localhost:8080
 
-5. The setup wizard will ask for your token. Ask OpenClaw:
+6. The setup wizard will ask for your token. Ask OpenClaw:
    > *"What's my gateway token?"*
 
 > **Can't find your home folder?** Ask OpenClaw: *"open my clawgpt folder"*
