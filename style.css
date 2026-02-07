@@ -883,6 +883,12 @@ body {
   border-color: var(--accent-color);
 }
 
+.input-container.drag-over {
+  border-color: var(--accent-color);
+  background: var(--bg-tertiary);
+  border-style: dashed;
+}
+
 #messageInput {
   flex: 1;
   background: transparent;
@@ -4185,6 +4191,321 @@ body {
   background: var(--accent-color);
   color: white;
   border-color: var(--accent-color);
+}
+
+/* ========================================
+   Workspace Panel
+   ======================================== */
+
+.workspace-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.workspace-panel-header h2 {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.workspace-refresh-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.workspace-refresh-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--accent-color);
+}
+
+.workspace-refresh-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.workspace-panel-body {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.workspace-path-bar {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.workspace-path-input {
+  width: 100%;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 6px 10px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: 'SF Mono', Monaco, 'Consolas', monospace;
+}
+
+.workspace-path-input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+.workspace-tree {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.workspace-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+  user-select: none;
+}
+
+.workspace-tree-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.workspace-tree-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.workspace-tree-folder-icon {
+  transform: rotate(0deg);
+  transition: transform 0.2s;
+}
+
+.workspace-tree-folder-icon.expanded {
+  transform: rotate(90deg);
+}
+
+.workspace-tree-label {
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspace-tree-children {
+  display: block;
+}
+
+.workspace-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  gap: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.workspace-empty svg {
+  opacity: 0.3;
+}
+
+.workspace-empty p {
+  font-size: 14px;
+  margin: 0;
+}
+
+.workspace-empty-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.workspace-viewer {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+}
+
+.workspace-viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.workspace-viewer-filename {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  font-family: 'SF Mono', Monaco, 'Consolas', monospace;
+}
+
+.workspace-viewer-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.workspace-viewer-edit-btn,
+.workspace-viewer-close-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.workspace-viewer-edit-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--accent-color);
+}
+
+.workspace-viewer-close-btn:hover {
+  background: var(--bg-tertiary);
+  color: #ef4444;
+}
+
+.workspace-viewer-content {
+  flex: 1;
+  overflow: auto;
+  background: #1e1e1e;
+  padding: 0;
+}
+
+[data-theme="light"] .workspace-viewer-content {
+  background: #f5f5f5;
+}
+
+.workspace-viewer-content pre {
+  margin: 0;
+  padding: 16px;
+  background: transparent;
+}
+
+.workspace-viewer-content code {
+  font-family: 'SF Mono', Monaco, 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.workspace-editor {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+}
+
+.workspace-editor textarea {
+  flex: 1;
+  background: #1e1e1e;
+  color: var(--text-primary);
+  border: none;
+  padding: 16px;
+  font-family: 'SF Mono', Monaco, 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  resize: none;
+}
+
+[data-theme="light"] .workspace-editor textarea {
+  background: #f5f5f5;
+}
+
+.workspace-editor textarea:focus {
+  outline: none;
+}
+
+.workspace-editor-actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.workspace-editor-save-btn,
+.workspace-editor-cancel-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s;
+}
+
+.workspace-editor-save-btn {
+  background: var(--accent-color);
+  color: white;
+}
+
+.workspace-editor-save-btn:hover {
+  background: var(--accent-hover);
+}
+
+.workspace-editor-cancel-btn {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.workspace-editor-cancel-btn:hover {
+  background: var(--border-color);
+}
+
+.workspace-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s;
+  position: relative;
+}
+
+.workspace-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.workspace-btn.active {
+  background: var(--bg-tertiary);
+  color: var(--accent-color);
+}
+
+.workspace-btn svg {
+  width: 18px;
+  height: 18px;
 }
 
 /* ========================================

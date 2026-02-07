@@ -2508,7 +2508,24 @@ window.CLAWGPT_CONFIG = {
       intelligenceVersionSelect: document.getElementById('intelligenceVersionSelect'),
       intelligenceVersionControls: document.getElementById('intelligenceVersionControls'),
       intelligenceReplaceCheck: document.getElementById('intelligenceReplaceCheck'),
-      intelligenceFooter: document.getElementById('intelligenceFooter')
+      intelligenceFooter: document.getElementById('intelligenceFooter'),
+      workspaceBtn: document.getElementById('workspaceBtn'),
+      workspaceTab: document.getElementById('workspaceTab'),
+      workspacePanel: document.getElementById('workspacePanel'),
+      workspacePanelBody: document.getElementById('workspacePanelBody'),
+      workspacePath: document.getElementById('workspacePath'),
+      workspaceTree: document.getElementById('workspaceTree'),
+      workspaceRefreshBtn: document.getElementById('workspaceRefreshBtn'),
+      workspaceViewer: document.getElementById('workspaceViewer'),
+      workspaceViewerFilename: document.getElementById('workspaceViewerFilename'),
+      workspaceViewerContent: document.getElementById('workspaceViewerContent'),
+      workspaceViewerCode: document.getElementById('workspaceViewerCode'),
+      workspaceViewerEditBtn: document.getElementById('workspaceViewerEditBtn'),
+      workspaceViewerCloseBtn: document.getElementById('workspaceViewerCloseBtn'),
+      workspaceEditor: document.getElementById('workspaceEditor'),
+      workspaceEditorTextarea: document.getElementById('workspaceEditorTextarea'),
+      workspaceEditorSaveBtn: document.getElementById('workspaceEditorSaveBtn'),
+      workspaceEditorCancelBtn: document.getElementById('workspaceEditorCancelBtn')
     };
 
     // Models list (fetched on connect)
@@ -2547,6 +2564,37 @@ window.CLAWGPT_CONFIG = {
       }
     });
     this.elements.messageInput.addEventListener('input', () => this.onInputChange());
+
+    // Drag and drop workspace files into message input
+    const inputContainer = document.querySelector('.input-container');
+    if (inputContainer) {
+      inputContainer.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        inputContainer.classList.add('drag-over');
+      });
+
+      inputContainer.addEventListener('dragleave', (e) => {
+        if (e.target === inputContainer) {
+          inputContainer.classList.remove('drag-over');
+        }
+      });
+
+      inputContainer.addEventListener('drop', (e) => {
+        e.preventDefault();
+        inputContainer.classList.remove('drag-over');
+
+        const data = e.dataTransfer.getData('text/plain');
+        if (data && data.startsWith('File: ')) {
+          const filePath = data.substring(6);
+          const currentText = this.elements.messageInput.value;
+          const mention = `[Workspace file: ${filePath}]`;
+          this.elements.messageInput.value = currentText + (currentText ? '\n\n' : '') + mention;
+          this.elements.messageInput.focus();
+          this.onInputChange();
+        }
+      });
+    }
 
     this.elements.newChatBtn.addEventListener('click', () => this.newChat());
     this.elements.stopBtn.addEventListener('click', () => this.stopGeneration());
@@ -2789,12 +2837,14 @@ window.CLAWGPT_CONFIG = {
 
     this.elements.menuBtn.addEventListener('click', () => this.toggleSidebar());
 
-    // Right panel (Intelligence + Artifacts)
+    // Right panel (Intelligence + Artifacts + Workspace)
     this.elements.intelligenceBtn.addEventListener('click', () => this.openRightPanel('intelligence'));
     this.elements.artifactsBtn.addEventListener('click', () => this.openRightPanel('artifacts'));
+    this.elements.workspaceBtn.addEventListener('click', () => this.openRightPanel('workspace'));
     this.elements.rightPanelCloseBtn.addEventListener('click', () => this.closeRightPanel());
     this.elements.intelligenceTab.addEventListener('click', () => this.switchRightPanelTab('intelligence'));
     this.elements.artifactsTab.addEventListener('click', () => this.switchRightPanelTab('artifacts'));
+    this.elements.workspaceTab.addEventListener('click', () => this.switchRightPanelTab('workspace'));
 
     // Intelligence panel
     this.elements.intelligenceGenerateBtn.addEventListener('click', () => this.runIntelligenceExtraction());
@@ -2806,6 +2856,24 @@ window.CLAWGPT_CONFIG = {
     this.elements.intelligenceVersionSelect.addEventListener('change', (e) => this.onVersionSelected(e));
     this.initRightPanelResize();
     this.loadIntelligencePrompts();
+
+    // Workspace panel
+    this.elements.workspaceRefreshBtn.addEventListener('click', () => this.loadWorkspaceFiles());
+    this.elements.workspaceViewerCloseBtn.addEventListener('click', () => this.closeWorkspaceViewer());
+    this.elements.workspaceViewerEditBtn.addEventListener('click', () => this.openWorkspaceEditor());
+    this.elements.workspaceEditorSaveBtn.addEventListener('click', () => this.saveWorkspaceFile());
+    this.elements.workspaceEditorCancelBtn.addEventListener('click', () => this.cancelWorkspaceEdit());
+    this.elements.workspacePath.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        this.loadWorkspaceFiles();
+      }
+    });
+    this.currentWorkspaceFile = null;
+    this.workspaceFileTree = {};
+
+    // Load expanded folders state
+    const expandedDirs = localStorage.getItem('clawgpt-workspace-expanded');
+    this.workspaceExpandedDirs = expandedDirs ? new Set(JSON.parse(expandedDirs)) : new Set();
 
     // Sidebar overlay - close sidebar when clicking outside
     const sidebarOverlay = document.getElementById('sidebarOverlay');
@@ -7006,26 +7074,32 @@ If multiple files, return multiple objects in the array.`;
     panel.classList.remove('open');
     this.elements.intelligenceBtn.classList.remove('active');
     this.elements.artifactsBtn.classList.remove('active');
+    this.elements.workspaceBtn.classList.remove('active');
   }
 
   switchRightPanelTab(tab) {
     // Update tab buttons
     this.elements.intelligenceTab.classList.toggle('active', tab === 'intelligence');
     this.elements.artifactsTab.classList.toggle('active', tab === 'artifacts');
+    this.elements.workspaceTab.classList.toggle('active', tab === 'workspace');
 
     // Update header buttons
     this.elements.intelligenceBtn.classList.toggle('active', tab === 'intelligence');
     this.elements.artifactsBtn.classList.toggle('active', tab === 'artifacts');
+    this.elements.workspaceBtn.classList.toggle('active', tab === 'workspace');
 
     // Show/hide panel content
     this.elements.intelligencePanel.style.display = tab === 'intelligence' ? 'flex' : 'none';
     this.elements.artifactsPanel.style.display = tab === 'artifacts' ? 'flex' : 'none';
+    this.elements.workspacePanel.style.display = tab === 'workspace' ? 'flex' : 'none';
 
     // Load data for the active tab
     if (tab === 'intelligence') {
       this.loadIntelligenceForCurrentChat();
     } else if (tab === 'artifacts') {
       this.loadArtifactsForCurrentChat();
+    } else if (tab === 'workspace') {
+      this.loadWorkspaceFiles();
     }
   }
 
@@ -8464,6 +8538,329 @@ If multiple files, return multiple objects in the array.`;
     ctx.beginPath();
     ctx.arc(cx, cy, glowRadius, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  // --- Workspace Panel ---
+
+  async loadWorkspaceFiles() {
+    if (!this.connected) {
+      this.showToast('Not connected to gateway');
+      return;
+    }
+
+    const workspacePath = this.elements.workspacePath.value.trim() || '~/.openclaw/workspace';
+
+    try {
+      // Use find to list all files and directories
+      const result = await this.request('exec.run', {
+        command: `find "${workspacePath}" -maxdepth 3 \\( -type f -o -type d \\) | head -100`,
+        shell: '/bin/bash'
+      });
+
+      if (result && result.stdout) {
+        const lines = result.stdout.trim().split('\n').filter(l => l.trim());
+        this.workspaceFileTree = this.buildFileTree(lines, workspacePath);
+        this.renderWorkspaceTree();
+      } else {
+        this.showWorkspaceEmpty('No files found');
+      }
+    } catch (error) {
+      console.error('Failed to load workspace files:', error);
+      this.showWorkspaceEmpty('Failed to load workspace: ' + error.message);
+    }
+  }
+
+  buildFileTree(paths, basePath) {
+    const tree = {};
+    const pathSet = new Set(paths);
+
+    // Normalize base path
+    const normalizedBase = basePath.replace(/\/$/, '');
+
+    for (const path of paths) {
+      if (!path || path === normalizedBase) continue;
+
+      let relativePath = path;
+      if (path.startsWith(normalizedBase + '/')) {
+        relativePath = path.substring(normalizedBase.length + 1);
+      }
+
+      const parts = relativePath.split('/').filter(p => p);
+      let current = tree;
+      let currentPath = normalizedBase;
+
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        currentPath = currentPath + '/' + part;
+        const isLastPart = i === parts.length - 1;
+
+        // Check if this path exists as a directory by seeing if any paths start with it
+        const isDirectory = !isLastPart || [...pathSet].some(p => p.startsWith(currentPath + '/'));
+
+        if (!current[part]) {
+          current[part] = {
+            name: part,
+            fullPath: currentPath,
+            isDirectory: isDirectory,
+            children: {}
+          };
+        }
+        current = current[part].children;
+      }
+    }
+
+    return tree;
+  }
+
+  renderWorkspaceTree() {
+    const tree = this.elements.workspaceTree;
+    tree.innerHTML = '';
+
+    if (Object.keys(this.workspaceFileTree).length === 0) {
+      this.showWorkspaceEmpty('No files found');
+      return;
+    }
+
+    const renderNode = (node, container, level = 0) => {
+      const item = document.createElement('div');
+      item.className = 'workspace-tree-item';
+      item.style.paddingLeft = (level * 16) + 'px';
+
+      if (node.isDirectory) {
+        const expanded = this.workspaceExpandedDirs && this.workspaceExpandedDirs.has(node.fullPath);
+
+        item.innerHTML = `
+          <svg class="workspace-tree-icon workspace-tree-folder-icon ${expanded ? 'expanded' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9 6 15 12 9 18"/>
+          </svg>
+          <svg class="workspace-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+          <span class="workspace-tree-label">${node.name}</span>
+        `;
+
+        item.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.toggleWorkspaceFolder(node.fullPath);
+        });
+
+        container.appendChild(item);
+
+        if (expanded && Object.keys(node.children).length > 0) {
+          const childContainer = document.createElement('div');
+          childContainer.className = 'workspace-tree-children';
+          for (const childName in node.children) {
+            renderNode(node.children[childName], childContainer, level + 1);
+          }
+          container.appendChild(childContainer);
+        }
+      } else {
+        const ext = node.name.split('.').pop().toLowerCase();
+        const icon = this.getFileIcon(ext);
+
+        item.innerHTML = `
+          <svg class="workspace-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            ${icon}
+          </svg>
+          <span class="workspace-tree-label">${node.name}</span>
+        `;
+
+        item.draggable = true;
+        item.addEventListener('dragstart', (e) => {
+          e.dataTransfer.setData('text/plain', `File: ${node.fullPath}`);
+          e.dataTransfer.effectAllowed = 'copy';
+        });
+
+        item.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.openWorkspaceFile(node.fullPath);
+        });
+
+        container.appendChild(item);
+      }
+    };
+
+    for (const nodeName in this.workspaceFileTree) {
+      renderNode(this.workspaceFileTree[nodeName], tree, 0);
+    }
+  }
+
+  getFileIcon(ext) {
+    // Return SVG path for file icon based on extension
+    switch (ext) {
+      case 'js':
+      case 'ts':
+      case 'jsx':
+      case 'tsx':
+        return '<rect x="4" y="2" width="16" height="20" rx="2"/><text x="12" y="14" text-anchor="middle" font-size="8" fill="currentColor">JS</text>';
+      case 'py':
+        return '<rect x="4" y="2" width="16" height="20" rx="2"/><text x="12" y="14" text-anchor="middle" font-size="8" fill="currentColor">PY</text>';
+      case 'md':
+        return '<rect x="4" y="2" width="16" height="20" rx="2"/><text x="12" y="14" text-anchor="middle" font-size="8" fill="currentColor">MD</text>';
+      case 'json':
+        return '<rect x="4" y="2" width="16" height="20" rx="2"/><text x="12" y="14" text-anchor="middle" font-size="7" fill="currentColor">JSON</text>';
+      default:
+        return '<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/>';
+    }
+  }
+
+  toggleWorkspaceFolder(path) {
+    if (!this.workspaceExpandedDirs) {
+      this.workspaceExpandedDirs = new Set();
+    }
+
+    if (this.workspaceExpandedDirs.has(path)) {
+      this.workspaceExpandedDirs.delete(path);
+    } else {
+      this.workspaceExpandedDirs.add(path);
+    }
+
+    // Save to localStorage
+    localStorage.setItem('clawgpt-workspace-expanded', JSON.stringify([...this.workspaceExpandedDirs]));
+
+    this.renderWorkspaceTree();
+  }
+
+  async openWorkspaceFile(filePath) {
+    if (!this.connected) {
+      this.showToast('Not connected to gateway');
+      return;
+    }
+
+    try {
+      const result = await this.request('exec.run', {
+        command: `cat "${filePath}"`,
+        shell: '/bin/bash'
+      });
+
+      if (result && result.stdout !== undefined) {
+        this.currentWorkspaceFile = filePath;
+        this.currentWorkspaceContent = result.stdout;
+
+        // Show viewer
+        this.elements.workspaceViewer.style.display = 'flex';
+        this.elements.workspaceViewerFilename.textContent = filePath.split('/').pop();
+
+        // Syntax highlighting
+        const ext = filePath.split('.').pop().toLowerCase();
+        const language = this.getLanguageFromExtension(ext);
+        const code = this.elements.workspaceViewerCode;
+        code.textContent = result.stdout;
+        code.className = `language-${language}`;
+
+        // Apply Prism highlighting
+        if (window.Prism) {
+          Prism.highlightElement(code);
+        }
+
+        // Hide tree temporarily to show viewer
+        this.elements.workspaceTree.style.display = 'none';
+      }
+    } catch (error) {
+      console.error('Failed to read file:', error);
+      this.showToast('Failed to read file: ' + error.message);
+    }
+  }
+
+  getLanguageFromExtension(ext) {
+    const map = {
+      'js': 'javascript',
+      'jsx': 'jsx',
+      'ts': 'typescript',
+      'tsx': 'tsx',
+      'py': 'python',
+      'rb': 'ruby',
+      'go': 'go',
+      'rs': 'rust',
+      'java': 'java',
+      'c': 'c',
+      'cpp': 'cpp',
+      'cs': 'csharp',
+      'php': 'php',
+      'html': 'html',
+      'css': 'css',
+      'scss': 'scss',
+      'json': 'json',
+      'xml': 'xml',
+      'yaml': 'yaml',
+      'yml': 'yaml',
+      'md': 'markdown',
+      'sh': 'bash',
+      'bash': 'bash',
+      'sql': 'sql'
+    };
+    return map[ext] || 'plaintext';
+  }
+
+  closeWorkspaceViewer() {
+    this.elements.workspaceViewer.style.display = 'none';
+    this.elements.workspaceTree.style.display = 'block';
+    this.currentWorkspaceFile = null;
+    this.currentWorkspaceContent = null;
+
+    // Close editor if open
+    if (this.elements.workspaceEditor.style.display !== 'none') {
+      this.cancelWorkspaceEdit();
+    }
+  }
+
+  openWorkspaceEditor() {
+    if (!this.currentWorkspaceFile) return;
+
+    // Show editor, hide viewer content
+    this.elements.workspaceViewerContent.style.display = 'none';
+    this.elements.workspaceEditor.style.display = 'flex';
+    this.elements.workspaceEditorTextarea.value = this.currentWorkspaceContent;
+    this.elements.workspaceEditorTextarea.focus();
+  }
+
+  cancelWorkspaceEdit() {
+    this.elements.workspaceViewerContent.style.display = 'block';
+    this.elements.workspaceEditor.style.display = 'none';
+  }
+
+  async saveWorkspaceFile() {
+    if (!this.connected || !this.currentWorkspaceFile) return;
+
+    const newContent = this.elements.workspaceEditorTextarea.value;
+
+    try {
+      // Escape content for heredoc
+      const escapedContent = newContent.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
+      const result = await this.request('exec.run', {
+        command: `cat > "${this.currentWorkspaceFile}" << 'CLAWGPT_EOF'\n${newContent}\nCLAWGPT_EOF`,
+        shell: '/bin/bash'
+      });
+
+      this.showToast('File saved successfully');
+      this.currentWorkspaceContent = newContent;
+
+      // Update viewer
+      const code = this.elements.workspaceViewerCode;
+      code.textContent = newContent;
+      if (window.Prism) {
+        Prism.highlightElement(code);
+      }
+
+      // Close editor
+      this.cancelWorkspaceEdit();
+    } catch (error) {
+      console.error('Failed to save file:', error);
+      this.showToast('Failed to save file: ' + error.message);
+    }
+  }
+
+  showWorkspaceEmpty(message) {
+    this.elements.workspaceTree.innerHTML = `
+      <div class="workspace-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+        </svg>
+        <p>${message}</p>
+        <p class="workspace-empty-hint">Click refresh to load workspace files</p>
+      </div>
+    `;
   }
 }
 

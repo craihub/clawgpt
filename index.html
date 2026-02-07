@@ -108,6 +108,11 @@
           </svg>
           <span class="artifacts-badge" id="artifactsBadge" style="display:none;">0</span>
         </button>
+        <button class="workspace-btn" id="workspaceBtn" title="Browse & edit workspace files">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+        </button>
         <div class="status" id="status">Disconnected</div>
       </header>
 
@@ -188,6 +193,12 @@
           </svg>
           <span>Artifacts</span>
           <span class="tab-badge" id="artifactsTabBadge" style="display:none;">0</span>
+        </button>
+        <button class="right-panel-tab" id="workspaceTab" data-panel="workspace">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+          <span>Workspace</span>
         </button>
         <button class="right-panel-close-btn" id="rightPanelCloseBtn" title="Close panel">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -274,6 +285,63 @@
               </svg>
               <p>No artifacts yet</p>
               <p class="artifacts-empty-hint">Code, HTML, SVG, and diagrams will appear here</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Workspace Panel Content -->
+      <div class="panel-content" id="workspacePanel" style="display:none;">
+        <div class="workspace-panel-header">
+          <h2>Workspace</h2>
+          <button class="workspace-refresh-btn" id="workspaceRefreshBtn" title="Refresh workspace">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <polyline points="23 4 23 10 17 10"/>
+              <polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+          </button>
+        </div>
+        <div class="workspace-panel-body" id="workspacePanelBody">
+          <div class="workspace-path-bar">
+            <input type="text" id="workspacePath" class="workspace-path-input" placeholder="~/.openclaw/workspace" value="~/.openclaw/workspace">
+          </div>
+          <div class="workspace-tree" id="workspaceTree">
+            <div class="workspace-empty">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+              </svg>
+              <p>No workspace files</p>
+              <p class="workspace-empty-hint">Click refresh to load workspace files</p>
+            </div>
+          </div>
+          <div class="workspace-viewer" id="workspaceViewer" style="display:none;">
+            <div class="workspace-viewer-header">
+              <span class="workspace-viewer-filename" id="workspaceViewerFilename"></span>
+              <div class="workspace-viewer-actions">
+                <button class="workspace-viewer-edit-btn" id="workspaceViewerEditBtn" title="Edit file">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </button>
+                <button class="workspace-viewer-close-btn" id="workspaceViewerCloseBtn" title="Close file">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="workspace-viewer-content" id="workspaceViewerContent">
+              <pre><code id="workspaceViewerCode"></code></pre>
+            </div>
+            <div class="workspace-editor" id="workspaceEditor" style="display:none;">
+              <textarea id="workspaceEditorTextarea"></textarea>
+              <div class="workspace-editor-actions">
+                <button class="workspace-editor-save-btn" id="workspaceEditorSaveBtn">Save</button>
+                <button class="workspace-editor-cancel-btn" id="workspaceEditorCancelBtn">Cancel</button>
+              </div>
             </div>
           </div>
         </div>
