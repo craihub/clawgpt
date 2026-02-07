@@ -1,3 +1,57 @@
+// Audio playback queue for sequential TTS chunk playback
+class AudioQueue {
+  constructor(onEmpty) {
+    this.queue = [];
+    this.isPlaying = false;
+    this.onEmpty = onEmpty;
+    this._currentAudio = null;
+  }
+
+  enqueue(audioBlob) {
+    this.queue.push(audioBlob);
+    if (!this.isPlaying) this.playNext();
+  }
+
+  async playNext() {
+    if (this.queue.length === 0) {
+      this.isPlaying = false;
+      if (this.onEmpty) this.onEmpty();
+      return;
+    }
+    this.isPlaying = true;
+    const blob = this.queue.shift();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    this._currentAudio = audio;
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      this._currentAudio = null;
+      this.playNext();
+    };
+    audio.onerror = () => {
+      URL.revokeObjectURL(url);
+      this._currentAudio = null;
+      this.playNext();
+    };
+    try {
+      await audio.play();
+    } catch (e) {
+      console.error('AudioQueue play error:', e);
+      this._currentAudio = null;
+      this.playNext();
+    }
+  }
+
+  clear() {
+    this.queue = [];
+    if (this._currentAudio) {
+      this._currentAudio.pause();
+      this._currentAudio = null;
+    }
+    this.isPlaying = false;
+  }
+}
+
 class ClawGPT {
   // Stop words for search filtering (class constant for performance)
   static STOP_WORDS = new Set([
@@ -200,6 +254,13 @@ class ClawGPT {
       this.semanticSearch = settings.semanticSearch || false;
       this.showTokens = settings.showTokens !== false;
       this.desktopNotifications = settings.desktopNotifications || false;
+      // Voice / Talk Mode settings
+      this.ttsProvider = settings.ttsProvider || 'browser';
+      this.elevenlabsApiKey = settings.elevenlabsApiKey || '';
+      this.elevenlabsVoiceId = settings.elevenlabsVoiceId || 'JBFqnCBsd6RMkjVDRZzb';
+      this.elevenlabsModel = settings.elevenlabsModel || 'eleven_turbo_v2_5';
+      this.streamingTts = settings.streamingTts !== false;
+      this.autoListenAfterResponse = settings.autoListenAfterResponse !== false;
     } else {
       // No saved settings - use config.js values or defaults
       this.gatewayUrl = config.gatewayUrl || 'ws://127.0.0.1:18789';
@@ -210,6 +271,13 @@ class ClawGPT {
       this.semanticSearch = false;
       this.showTokens = true;
       this.desktopNotifications = false;
+      // Voice / Talk Mode defaults
+      this.ttsProvider = 'browser';
+      this.elevenlabsApiKey = '';
+      this.elevenlabsVoiceId = 'JBFqnCBsd6RMkjVDRZzb';
+      this.elevenlabsModel = 'eleven_turbo_v2_5';
+      this.streamingTts = true;
+      this.autoListenAfterResponse = true;
     }
 
     // Log if using config.js
@@ -264,7 +332,14 @@ class ClawGPT {
       smartSearch: this.smartSearch,
       semanticSearch: this.semanticSearch,
       showTokens: this.showTokens,
-      desktopNotifications: this.desktopNotifications
+      desktopNotifications: this.desktopNotifications,
+      // Voice / Talk Mode
+      ttsProvider: this.ttsProvider,
+      elevenlabsApiKey: this.elevenlabsApiKey,
+      elevenlabsVoiceId: this.elevenlabsVoiceId,
+      elevenlabsModel: this.elevenlabsModel,
+      streamingTts: this.streamingTts,
+      autoListenAfterResponse: this.autoListenAfterResponse
     };
 
     // Only save connection settings if NOT using config.js
@@ -2822,6 +2897,17 @@ window.CLAWGPT_CONFIG = {
       scanQrBtn.addEventListener('click', () => this.scanQRCode());
     }
 
+    // Voice / Talk Mode settings
+    const ttsProviderEl = document.getElementById('ttsProvider');
+    if (ttsProviderEl) {
+      ttsProviderEl.addEventListener('change', () => this.toggleElevenLabsSettings());
+    }
+
+    const refreshVoicesBtn = document.getElementById('refreshVoicesBtn');
+    if (refreshVoicesBtn) {
+      refreshVoicesBtn.addEventListener('click', () => this.fetchElevenLabsVoices());
+    }
+
     // Manual setup toggle (mobile)
     const advancedSetupToggle = document.getElementById('advancedSetupToggle');
     const advancedSetupFields = document.getElementById('advancedSetupFields');
@@ -3246,6 +3332,7 @@ window.CLAWGPT_CONFIG = {
     this.updateSettingsForConfigMode();
     this.updateFileMemoryUI();
     this.updateLogCount();
+    this.updateVoiceSettings();
   }
 
   updateLogCount() {
@@ -3260,6 +3347,81 @@ window.CLAWGPT_CONFIG = {
         logCountEl.textContent = `Logs: ${logCount} entries`;
         logCountEl.style.color = '';
       }
+    }
+  }
+
+  updateVoiceSettings() {
+    // Populate voice settings UI
+    const ttsProviderEl = document.getElementById('ttsProvider');
+    if (ttsProviderEl) {
+      ttsProviderEl.value = this.ttsProvider;
+      this.toggleElevenLabsSettings();
+    }
+
+    const elevenlabsApiKeyEl = document.getElementById('elevenlabsApiKey');
+    if (elevenlabsApiKeyEl) elevenlabsApiKeyEl.value = this.elevenlabsApiKey;
+
+    const elevenlabsVoiceEl = document.getElementById('elevenlabsVoice');
+    if (elevenlabsVoiceEl) elevenlabsVoiceEl.value = this.elevenlabsVoiceId;
+
+    const elevenlabsModelEl = document.getElementById('elevenlabsModel');
+    if (elevenlabsModelEl) elevenlabsModelEl.value = this.elevenlabsModel;
+
+    const streamingTtsEl = document.getElementById('streamingTts');
+    if (streamingTtsEl) streamingTtsEl.checked = this.streamingTts;
+
+    const autoListenEl = document.getElementById('autoListenAfterResponse');
+    if (autoListenEl) autoListenEl.checked = this.autoListenAfterResponse;
+  }
+
+  toggleElevenLabsSettings() {
+    const ttsProviderEl = document.getElementById('ttsProvider');
+    const elevenlabsSettingsEl = document.getElementById('elevenlabsSettings');
+    if (elevenlabsSettingsEl && ttsProviderEl) {
+      elevenlabsSettingsEl.style.display = ttsProviderEl.value === 'elevenlabs' ? 'block' : 'none';
+    }
+  }
+
+  async fetchElevenLabsVoices() {
+    const apiKey = document.getElementById('elevenlabsApiKey')?.value;
+    if (!apiKey) {
+      this.showToast('Enter an API key first', true);
+      return;
+    }
+
+    const btn = document.getElementById('refreshVoicesBtn');
+    if (btn) btn.disabled = true;
+
+    try {
+      const response = await fetch('https://api.elevenlabs.io/v1/voices', {
+        headers: { 'xi-api-key': apiKey }
+      });
+
+      if (!response.ok) {
+        throw new Error(response.status === 401 ? 'Invalid API key' : `Error ${response.status}`);
+      }
+
+      const data = await response.json();
+      const select = document.getElementById('elevenlabsVoice');
+      if (select && data.voices) {
+        const currentValue = select.value;
+        select.innerHTML = '';
+        data.voices.forEach(voice => {
+          const option = document.createElement('option');
+          option.value = voice.voice_id;
+          option.textContent = voice.name;
+          select.appendChild(option);
+        });
+        // Restore selection if it exists
+        if (currentValue && select.querySelector(`option[value="${currentValue}"]`)) {
+          select.value = currentValue;
+        }
+        this.showToast(`Loaded ${data.voices.length} voices`);
+      }
+    } catch (error) {
+      this.showToast('Failed to load voices: ' + error.message, true);
+    } finally {
+      if (btn) btn.disabled = false;
     }
   }
 
@@ -3920,12 +4082,31 @@ window.CLAWGPT_CONFIG = {
     if (desktopNotificationsEl) {
       const wasEnabled = this.desktopNotifications;
       this.desktopNotifications = desktopNotificationsEl.checked;
-      
+
       // Request permission if enabling for the first time
       if (this.desktopNotifications && !wasEnabled) {
         this.requestNotificationPermission();
       }
     }
+
+    // Voice / Talk Mode settings
+    const ttsProviderEl = document.getElementById('ttsProvider');
+    if (ttsProviderEl) this.ttsProvider = ttsProviderEl.value;
+
+    const elevenlabsApiKeyEl = document.getElementById('elevenlabsApiKey');
+    if (elevenlabsApiKeyEl) this.elevenlabsApiKey = elevenlabsApiKeyEl.value;
+
+    const elevenlabsVoiceEl = document.getElementById('elevenlabsVoice');
+    if (elevenlabsVoiceEl) this.elevenlabsVoiceId = elevenlabsVoiceEl.value;
+
+    const elevenlabsModelEl = document.getElementById('elevenlabsModel');
+    if (elevenlabsModelEl) this.elevenlabsModel = elevenlabsModelEl.value;
+
+    const streamingTtsEl = document.getElementById('streamingTts');
+    if (streamingTtsEl) this.streamingTts = streamingTtsEl.checked;
+
+    const autoListenEl = document.getElementById('autoListenAfterResponse');
+    if (autoListenEl) this.autoListenAfterResponse = autoListenEl.checked;
 
     this.saveSettings();
     this.closeSettings();
@@ -7298,6 +7479,11 @@ Example: [0, 2, 5]`;
       this.streamBuffer = content;
       this.updateStreamingMessage();
 
+      // Talk Mode: stream to TTS
+      if (this.talkModeActive && this._talkWaitingForResponse) {
+        this.handleTalkStreamDelta(content);
+      }
+
       // Forward streaming to phone (throttled to 100ms)
       if (this.relayEncrypted && this.currentChatId) {
         const now = Date.now();
@@ -7336,6 +7522,8 @@ Example: [0, 2, 5]`;
 
         // Feed to Talk Mode if active
         if (this.talkModeActive && this._talkWaitingForResponse) {
+          // Reset streaming position for next time
+          this._lastTtsBufferPos = 0;
           this.handleTalkModeResponse(finalContent);
         }
       }
@@ -8755,6 +8943,12 @@ If multiple files, return multiple objects in the array.`;
     this.talkModeHandsfree = true;
     this.talkModePTTHeld = false;
     this._talkTranscriptEntries = [];
+    this._talkSentenceBuffer = '';
+    this._talkStreamingComplete = false;
+    this._lastTtsBufferPos = 0;
+
+    // Initialize audio queue for ElevenLabs streaming
+    this.audioQueue = new AudioQueue(() => this.onAudioQueueEmpty());
 
     const btn = document.getElementById('talkModeBtn');
     const overlay = document.getElementById('talkModeOverlay');
@@ -8996,8 +9190,14 @@ If multiple files, return multiple objects in the array.`;
       try { this._talkRecognition.stop(); } catch {}
     }
     speechSynthesis.cancel();
+    if (this.audioQueue) {
+      this.audioQueue.clear();
+    }
     this.stopTalkVisualization();
     this.talkModeState = 'idle';
+    this._talkStreamingComplete = false;
+    this._lastTtsBufferPos = 0;
+    this._talkSentenceBuffer = '';
   }
 
   onOrbTap() {
@@ -9126,22 +9326,167 @@ If multiple files, return multiple objects in the array.`;
 
   speakTalkResponse(text) {
     if (!this.talkModeActive) return;
+
+    // Check if ElevenLabs streaming already handled the speech
+    if (this.ttsProvider === 'elevenlabs' && this.elevenlabsApiKey && this.streamingTts) {
+      // Streaming TTS was already handled via delta events, just flush buffer
+      this.handleTalkStreamEnd(text);
+      return;
+    }
+
     this.setTalkState('speaking');
 
-    // Clean text for speech (remove markdown, code blocks, etc.)
-    let cleanText = text
-      .replace(/```[\s\S]*?```/g, ' code block omitted ')
-      .replace(/`[^`]+`/g, '')
+    // Use ElevenLabs for non-streaming or browser TTS as fallback
+    if (this.ttsProvider === 'elevenlabs' && this.elevenlabsApiKey) {
+      this.speakWithElevenLabs(text);
+    } else {
+      this.speakWithBrowserTts(text);
+    }
+  }
+
+  // ElevenLabs streaming TTS support
+  handleTalkStreamDelta(content) {
+    if (!this.talkModeActive) return;
+
+    this.setTalkState('speaking');
+
+    if (this.ttsProvider === 'elevenlabs' && this.elevenlabsApiKey && this.streamingTts) {
+      // Streaming TTS: buffer into sentences
+      this.bufferForStreamingTts(content);
+    }
+  }
+
+  handleTalkStreamEnd(finalContent) {
+    if (!this.talkModeActive) return;
+    this._talkStreamingComplete = true;
+
+    if (this.ttsProvider === 'elevenlabs' && this.elevenlabsApiKey) {
+      if (this.streamingTts) {
+        // Flush remaining buffer
+        this.flushStreamingTtsBuffer();
+      } else {
+        // Non-streaming: send full response
+        this.speakWithElevenLabs(finalContent);
+      }
+    } else {
+      // Browser TTS for full response
+      this.speakWithBrowserTts(finalContent);
+    }
+  }
+
+  bufferForStreamingTts(fullContent) {
+    // fullContent is the accumulated stream so far
+    // Find new text since last buffer point
+    const newText = fullContent.substring(this._lastTtsBufferPos || 0);
+    this._lastTtsBufferPos = fullContent.length;
+
+    this._talkSentenceBuffer += newText;
+
+    // Check if we have a complete sentence
+    const sentenceEnders = /[.!?\n]/;
+    if (sentenceEnders.test(this._talkSentenceBuffer) && this._talkSentenceBuffer.length > 20) {
+      const chunk = this._talkSentenceBuffer.trim();
+      this._talkSentenceBuffer = '';
+      if (chunk) this.speakWithElevenLabs(chunk);
+    } else if (this._talkSentenceBuffer.length > 150) {
+      // Long clause without punctuation
+      const chunk = this._talkSentenceBuffer.trim();
+      this._talkSentenceBuffer = '';
+      if (chunk) this.speakWithElevenLabs(chunk);
+    }
+  }
+
+  flushStreamingTtsBuffer() {
+    this._lastTtsBufferPos = 0;
+    if (this._talkSentenceBuffer.trim()) {
+      this.speakWithElevenLabs(this._talkSentenceBuffer.trim());
+      this._talkSentenceBuffer = '';
+    }
+  }
+
+  async speakWithElevenLabs(text) {
+    if (!text || !this.elevenlabsApiKey) return;
+
+    // Strip markdown formatting for cleaner speech
+    const cleanText = text
+      .replace(/```[\s\S]*?```/g, ' code block ')
+      .replace(/`([^`]+)`/g, '$1')
       .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/\*([^*]+)\*/g, '$1')
+      .replace(/#+\s/g, '')
       .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-      .replace(/#{1,6}\s/g, '')
-      .replace(/[-*]\s/g, '')
-      .replace(/\n+/g, '. ')
+      .replace(/\n{2,}/g, '. ')
+      .replace(/\n/g, ' ')
       .trim();
 
-    // Limit length for TTS
-    if (cleanText.length > 1000) {
-      cleanText = cleanText.substring(0, 1000) + '... message truncated for speech.';
+    if (!cleanText) return;
+
+    try {
+      const response = await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${this.elevenlabsVoiceId}/stream`,
+        {
+          method: 'POST',
+          headers: {
+            'xi-api-key': this.elevenlabsApiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            text: cleanText,
+            model_id: this.elevenlabsModel,
+            optimize_streaming_latency: 4,
+            output_format: 'mp3_44100_128',
+          })
+        }
+      );
+
+      if (!response.ok) {
+        if (response.status === 429) {
+          console.warn('ElevenLabs rate limit, falling back to browser TTS');
+          this.speakWithBrowserTts(text);
+          return;
+        }
+        throw new Error(`ElevenLabs error: ${response.status}`);
+      }
+
+      // Collect stream into blob
+      const reader = response.body.getReader();
+      const chunks = [];
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+
+      const blob = new Blob(chunks, { type: 'audio/mpeg' });
+      this.audioQueue.enqueue(blob);
+    } catch (error) {
+      console.error('ElevenLabs TTS error:', error);
+      // Fallback to browser TTS
+      this.speakWithBrowserTts(text);
+    }
+  }
+
+  speakWithBrowserTts(text) {
+    if (!text || !this.ttsSupported) {
+      this.onTtsDone();
+      return;
+    }
+
+    // Strip markdown for cleaner speech
+    const cleanText = text
+      .replace(/```[\s\S]*?```/g, ' code block ')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/\*([^*]+)\*/g, '$1')
+      .replace(/#+\s/g, '')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/\n{2,}/g, '. ')
+      .replace(/\n/g, ' ')
+      .trim();
+
+    if (!cleanText) {
+      this.onTtsDone();
+      return;
     }
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
@@ -9149,23 +9494,34 @@ If multiple files, return multiple objects in the array.`;
     utterance.rate = 1.05;
     utterance.pitch = 1.0;
 
-    utterance.onend = () => {
-      if (this.talkModeActive) {
-        this.setTalkState('idle');
-        if (this.talkModeHandsfree) {
-          setTimeout(() => this.startTalkListening(), 300);
-        }
+    utterance.onend = () => this.onTtsDone();
+    utterance.onerror = (e) => {
+      if (e.error !== 'interrupted' && e.error !== 'canceled') {
+        console.error('Browser TTS error in Talk Mode:', e.error);
       }
+      this.onTtsDone();
     };
 
-    utterance.onerror = () => {
-      if (this.talkModeActive) {
-        this.setTalkState('idle');
-        if (this.talkModeHandsfree) this.startTalkListening();
-      }
-    };
+    speechSynthesis.cancel();
+    setTimeout(() => speechSynthesis.speak(utterance), 50);
+  }
 
-    speechSynthesis.speak(utterance);
+  onTtsDone() {
+    if (!this.talkModeActive) return;
+
+    if (this.autoListenAfterResponse && this.talkModeHandsfree) {
+      this.setTalkState('idle');
+      setTimeout(() => this.startTalkListening(), 300);
+    } else {
+      this.setTalkState('idle');
+    }
+  }
+
+  onAudioQueueEmpty() {
+    // Called when AudioQueue finishes playing all chunks
+    if (this.talkModeActive && this._talkStreamingComplete) {
+      this.onTtsDone();
+    }
   }
 
   updateTalkTranscript() {

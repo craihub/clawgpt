@@ -9,6 +9,7 @@
     style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com;
     connect-src *;
     img-src 'self' data: blob:;
+    media-src blob:;
     font-src 'self' data:;
   ">
   <title>ClawGPT</title>
@@ -596,6 +597,57 @@
             Desktop Notifications
           </label>
           <span class="setting-hint">Show notification when assistant replies (only when tab is not focused)</span>
+        </div>
+        <div class="settings-divider"></div>
+        <div class="settings-section-title">Voice / Talk Mode</div>
+        <div class="form-group">
+          <label for="ttsProvider">TTS Provider</label>
+          <select id="ttsProvider">
+            <option value="browser">Browser (free)</option>
+            <option value="elevenlabs">ElevenLabs</option>
+          </select>
+        </div>
+        <div id="elevenlabsSettings" class="voice-subsettings" style="display:none;">
+          <div class="form-group">
+            <label for="elevenlabsApiKey">ElevenLabs API Key</label>
+            <input type="password" id="elevenlabsApiKey" placeholder="Enter your ElevenLabs API key">
+          </div>
+          <div class="form-group">
+            <label for="elevenlabsVoice">Voice</label>
+            <select id="elevenlabsVoice">
+              <option value="JBFqnCBsd6RMkjVDRZzb">George</option>
+            </select>
+            <button class="data-btn" id="refreshVoicesBtn" style="margin-top:6px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                <polyline points="23 4 23 10 17 10"/>
+                <polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+              Refresh Voices
+            </button>
+          </div>
+          <div class="form-group">
+            <label for="elevenlabsModel">TTS Model</label>
+            <select id="elevenlabsModel">
+              <option value="eleven_turbo_v2_5">Turbo v2.5 (fastest)</option>
+              <option value="eleven_turbo_v2">Turbo v2</option>
+              <option value="eleven_monolingual_v1">Monolingual v1</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="streamingTts" checked>
+              Streaming TTS
+            </label>
+            <span class="setting-hint">Stream tokens to TTS as they arrive for faster first audio</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="autoListenAfterResponse" checked>
+            Auto-listen after response
+          </label>
+          <span class="setting-hint">Restart microphone after AI finishes speaking</span>
         </div>
         <div class="settings-divider"></div>
         <div class="settings-section-title">Data</div>

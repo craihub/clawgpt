@@ -5709,3 +5709,24 @@ body {
 .sidebar.collapsed ~ .cron-dashboard {
   left: 60px;
 }
+
+/* ========================================
+   Voice / Talk Mode Settings
+   ======================================== */
+
+.voice-subsettings {
+  margin-left: 0;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.1);
+  margin-bottom: 16px;
+}
+
+[data-theme="light"] .voice-subsettings {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.voice-subsettings .form-group:last-child {
+  margin-bottom: 0;
+}
