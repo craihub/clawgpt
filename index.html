@@ -101,6 +101,13 @@
             <path d="M12 2L9 9H2l6 4.5L5.5 21 12 16l6.5 5L16 13.5 22 9h-7z"/>
           </svg>
         </button>
+        <button class="artifacts-btn" id="artifactsBtn" title="View generated code, HTML, diagrams" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="16 18 22 12 16 6"></polyline>
+            <polyline points="8 6 2 12 8 18"></polyline>
+          </svg>
+          <span class="artifacts-badge" id="artifactsBadge" style="display:none;">0</span>
+        </button>
         <div class="status" id="status">Disconnected</div>
       </header>
 
@@ -162,20 +169,39 @@
       </div>
     </main>
 
-    <!-- Intelligence Panel -->
-    <aside class="intelligence-panel" id="intelligencePanel">
-      <div class="intelligence-resize-handle" id="intelligenceResizeHandle"></div>
-      <div class="intelligence-panel-header">
-        <h2>Conversation Intelligence</h2>
-        <div class="intelligence-panel-actions">
-          <button class="intelligence-close-btn" id="intelligenceCloseBtn" title="Close panel">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
-        </div>
+    <!-- Right Panel (Intelligence + Artifacts) -->
+    <aside class="right-panel" id="rightPanel">
+      <div class="right-panel-resize-handle" id="rightPanelResizeHandle"></div>
+
+      <!-- Panel Tabs -->
+      <div class="right-panel-tabs">
+        <button class="right-panel-tab" id="intelligenceTab" data-panel="intelligence">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <path d="M12 2L9 9H2l6 4.5L5.5 21 12 16l6.5 5L16 13.5 22 9h-7z"/>
+          </svg>
+          <span>Intelligence</span>
+        </button>
+        <button class="right-panel-tab" id="artifactsTab" data-panel="artifacts">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <polyline points="16 18 22 12 16 6"></polyline>
+            <polyline points="8 6 2 12 8 18"></polyline>
+          </svg>
+          <span>Artifacts</span>
+          <span class="tab-badge" id="artifactsTabBadge" style="display:none;">0</span>
+        </button>
+        <button class="right-panel-close-btn" id="rightPanelCloseBtn" title="Close panel">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
       </div>
+
+      <!-- Intelligence Panel Content -->
+      <div class="panel-content" id="intelligencePanel" style="display:none;">
+        <div class="intelligence-panel-header">
+          <h2>Conversation Intelligence</h2>
+        </div>
       <div class="intelligence-panel-body" id="intelligencePanelBody">
         <!-- Controls section -->
         <div class="intelligence-controls">
@@ -230,6 +256,26 @@
             </svg>
             Download All
           </button>
+        </div>
+      </div>
+      </div>
+
+      <!-- Artifacts Panel Content -->
+      <div class="panel-content" id="artifactsPanel" style="display:none;">
+        <div class="artifacts-panel-header">
+          <h2>Artifacts</h2>
+        </div>
+        <div class="artifacts-panel-body" id="artifactsPanelBody">
+          <div class="artifacts-list" id="artifactsList">
+            <div class="artifacts-empty">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48">
+                <polyline points="16 18 22 12 16 6"></polyline>
+                <polyline points="8 6 2 12 8 18"></polyline>
+              </svg>
+              <p>No artifacts yet</p>
+              <p class="artifacts-empty-hint">Code, HTML, SVG, and diagrams will appear here</p>
+            </div>
+          </div>
         </div>
       </div>
     </aside>

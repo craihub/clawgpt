@@ -2480,13 +2480,23 @@ window.CLAWGPT_CONFIG = {
       confirmRegenerateBtn: document.getElementById('confirmRegenerateBtn'),
       regenerateModelSelect: document.getElementById('regenerateModelSelect'),
       intelligenceBtn: document.getElementById('intelligenceBtn'),
+      rightPanel: document.getElementById('rightPanel'),
+      rightPanelCloseBtn: document.getElementById('rightPanelCloseBtn'),
+      rightPanelResizeHandle: document.getElementById('rightPanelResizeHandle'),
+      intelligenceTab: document.getElementById('intelligenceTab'),
+      artifactsTab: document.getElementById('artifactsTab'),
       intelligencePanel: document.getElementById('intelligencePanel'),
       intelligencePanelBody: document.getElementById('intelligencePanelBody'),
       intelligenceResults: document.getElementById('intelligenceResults'),
-      intelligenceCloseBtn: document.getElementById('intelligenceCloseBtn'),
       intelligenceGenerateBtn: document.getElementById('intelligenceGenerateBtn'),
       intelligenceDownloadAllBtn: document.getElementById('intelligenceDownloadAllBtn'),
       intelligenceResizeHandle: document.getElementById('intelligenceResizeHandle'),
+      artifactsBtn: document.getElementById('artifactsBtn'),
+      artifactsBadge: document.getElementById('artifactsBadge'),
+      artifactsTabBadge: document.getElementById('artifactsTabBadge'),
+      artifactsPanel: document.getElementById('artifactsPanel'),
+      artifactsPanelBody: document.getElementById('artifactsPanelBody'),
+      artifactsList: document.getElementById('artifactsList'),
       intelligencePromptSelect: document.getElementById('intelligencePromptSelect'),
       intelligencePromptViewBtn: document.getElementById('intelligencePromptViewBtn'),
       intelligencePromptEditor: document.getElementById('intelligencePromptEditor'),
@@ -2779,9 +2789,14 @@ window.CLAWGPT_CONFIG = {
 
     this.elements.menuBtn.addEventListener('click', () => this.toggleSidebar());
 
+    // Right panel (Intelligence + Artifacts)
+    this.elements.intelligenceBtn.addEventListener('click', () => this.openRightPanel('intelligence'));
+    this.elements.artifactsBtn.addEventListener('click', () => this.openRightPanel('artifacts'));
+    this.elements.rightPanelCloseBtn.addEventListener('click', () => this.closeRightPanel());
+    this.elements.intelligenceTab.addEventListener('click', () => this.switchRightPanelTab('intelligence'));
+    this.elements.artifactsTab.addEventListener('click', () => this.switchRightPanelTab('artifacts'));
+
     // Intelligence panel
-    this.elements.intelligenceBtn.addEventListener('click', () => this.toggleIntelligencePanel());
-    this.elements.intelligenceCloseBtn.addEventListener('click', () => this.closeIntelligencePanel());
     this.elements.intelligenceGenerateBtn.addEventListener('click', () => this.runIntelligenceExtraction());
     this.elements.intelligenceDownloadAllBtn.addEventListener('click', () => this.downloadAllIntelligence());
     this.elements.intelligencePromptViewBtn.addEventListener('click', () => this.togglePromptEditor());
@@ -2789,7 +2804,7 @@ window.CLAWGPT_CONFIG = {
     this.elements.intelligencePromptCancelBtn.addEventListener('click', () => this.hidePromptEditor());
     this.elements.intelligencePromptSelect.addEventListener('change', (e) => this.onPromptSelected(e));
     this.elements.intelligenceVersionSelect.addEventListener('change', (e) => this.onVersionSelected(e));
-    this.initIntelligenceResize();
+    this.initRightPanelResize();
     this.loadIntelligencePrompts();
 
     // Sidebar overlay - close sidebar when clicking outside
@@ -4282,8 +4297,9 @@ Example: [0, 2, 5]`;
 
     this.currentChatId = chatId;
     this._visibleMessageCount = null; // Reset virtualization on chat switch
-    this.closeIntelligencePanel();
+    this.closeRightPanel();
     this.renderMessages();
+    this.scanExistingArtifacts();
     this.renderChatList();
     this.updateTokenDisplay(); // Also updates model display
     this.elements.sidebar.classList.remove('open');
@@ -4627,6 +4643,7 @@ Example: [0, 2, 5]`;
   renderMessages() {
     const chat = this.currentChatId ? this.chats[this.currentChatId] : null;
     this.updateIntelligenceButton();
+    this.updateArtifactsBadge();
 
     if (!chat || chat.messages.length === 0) {
       this.elements.welcome.style.display = 'flex';
@@ -6435,6 +6452,9 @@ Example: [0, 2, 5]`;
 
     this.renderMessages();
 
+    // Detect artifacts in the new assistant message
+    this.detectAndSaveArtifacts(assistantMsg.id);
+
     // Generate AI title after first response if needed
     if (chat.needsAITitle && chat.messages.length >= 2) {
       delete chat.needsAITitle; // Clear flag
@@ -6724,27 +6744,52 @@ If multiple files, return multiple objects in the array.`;
     this.elements.intelligenceBtn.disabled = !hasMessages;
   }
 
-  toggleIntelligencePanel() {
-    const panel = this.elements.intelligencePanel;
-    if (panel.classList.contains('open')) {
-      this.closeIntelligencePanel();
-    } else {
-      this.openIntelligencePanel();
+  // --- Right Panel (Intelligence + Artifacts) ---
+
+  openRightPanel(tab = 'intelligence') {
+    const panel = this.elements.rightPanel;
+    panel.classList.add('open');
+    this.switchRightPanelTab(tab);
+  }
+
+  closeRightPanel() {
+    const panel = this.elements.rightPanel;
+    panel.classList.remove('open');
+    this.elements.intelligenceBtn.classList.remove('active');
+    this.elements.artifactsBtn.classList.remove('active');
+  }
+
+  switchRightPanelTab(tab) {
+    // Update tab buttons
+    this.elements.intelligenceTab.classList.toggle('active', tab === 'intelligence');
+    this.elements.artifactsTab.classList.toggle('active', tab === 'artifacts');
+
+    // Update header buttons
+    this.elements.intelligenceBtn.classList.toggle('active', tab === 'intelligence');
+    this.elements.artifactsBtn.classList.toggle('active', tab === 'artifacts');
+
+    // Show/hide panel content
+    this.elements.intelligencePanel.style.display = tab === 'intelligence' ? 'flex' : 'none';
+    this.elements.artifactsPanel.style.display = tab === 'artifacts' ? 'flex' : 'none';
+
+    // Load data for the active tab
+    if (tab === 'intelligence') {
+      this.loadIntelligenceForCurrentChat();
+    } else if (tab === 'artifacts') {
+      this.loadArtifactsForCurrentChat();
     }
   }
 
-  openIntelligencePanel() {
-    const panel = this.elements.intelligencePanel;
-    panel.classList.add('open');
-    this.elements.intelligenceBtn.classList.add('active');
-
+  loadIntelligenceForCurrentChat() {
     const chat = this.chats[this.currentChatId];
+    if (!chat) return;
+
     // Update info line
-    const msgCount = chat ? chat.messages.length : 0;
+    const msgCount = chat.messages.length;
     this.elements.intelligenceInfo.textContent = `claude-sonnet-4-5-20250514 • ${msgCount} messages`;
 
     // Show existing results if available
-    if (chat && chat.intelligenceVersions && chat.intelligenceVersions.length > 0) {
+    if (chat.intelligenceVersions && chat.intelligenceVersions.length > 0) {
       const currentVer = chat.intelligenceCurrentVersion || chat.intelligenceVersions.length;
       this.showVersionControls(chat);
       const version = chat.intelligenceVersions.find(v => v.version === currentVer) || chat.intelligenceVersions[chat.intelligenceVersions.length - 1];
@@ -6752,14 +6797,26 @@ If multiple files, return multiple objects in the array.`;
     }
   }
 
-  closeIntelligencePanel() {
-    this.elements.intelligencePanel.classList.remove('open');
-    this.elements.intelligenceBtn.classList.remove('active');
+  toggleIntelligencePanel() {
+    const panel = this.elements.rightPanel;
+    if (panel.classList.contains('open') && this.elements.intelligenceTab.classList.contains('active')) {
+      this.closeRightPanel();
+    } else {
+      this.openRightPanel('intelligence');
+    }
   }
 
-  initIntelligenceResize() {
-    const handle = this.elements.intelligenceResizeHandle;
-    const panel = this.elements.intelligencePanel;
+  openIntelligencePanel() {
+    this.openRightPanel('intelligence');
+  }
+
+  closeIntelligencePanel() {
+    this.closeRightPanel();
+  }
+
+  initRightPanelResize() {
+    const handle = this.elements.rightPanelResizeHandle;
+    const panel = this.elements.rightPanel;
     let startX, startWidth;
 
     const onMouseMove = (e) => {
@@ -6792,6 +6849,475 @@ If multiple files, return multiple objects in the array.`;
       document.addEventListener('touchmove', onMouseMove, { passive: false });
       document.addEventListener('touchend', onMouseUp);
     });
+  }
+
+  // --- Artifacts Detection and Rendering ---
+
+  detectArtifacts(message) {
+    if (!message || !message.content || message.role !== 'assistant') return [];
+
+    const artifacts = [];
+    const content = message.content;
+
+    // Regex to match code blocks with language tags
+    const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
+    let match;
+    let artifactId = 0;
+
+    while ((match = codeBlockRegex.exec(content)) !== null) {
+      const language = match[1] || 'text';
+      const code = match[2].trim();
+      const lineCount = code.split('\n').length;
+
+      // Heuristic: detect artifact-worthy content
+      let isArtifact = false;
+      let type = 'code';
+      let name = `${language} code`;
+
+      // Check if it's a complete HTML file
+      if (language === 'html' && (code.includes('<html') || code.includes('<!DOCTYPE'))) {
+        isArtifact = true;
+        type = 'html';
+        name = 'HTML Document';
+      }
+      // Check if it's SVG
+      else if (language === 'svg' || code.includes('<svg')) {
+        isArtifact = true;
+        type = 'svg';
+        name = 'SVG Graphic';
+      }
+      // Check if it's Mermaid diagram
+      else if (language === 'mermaid') {
+        isArtifact = true;
+        type = 'mermaid';
+        name = 'Mermaid Diagram';
+      }
+      // Check if it's Markdown
+      else if (language === 'markdown' || language === 'md') {
+        if (lineCount > 10 || code.includes('# ')) {
+          isArtifact = true;
+          type = 'markdown';
+          name = 'Markdown Document';
+        }
+      }
+      // Check if it's CSV
+      else if (language === 'csv' || (code.includes(',') && lineCount > 2)) {
+        const lines = code.split('\n');
+        const firstLine = lines[0];
+        if (firstLine.split(',').length > 1) {
+          isArtifact = true;
+          type = 'csv';
+          name = 'CSV Data';
+        }
+      }
+      // Generic code artifact (if more than 10 lines or looks like a complete file)
+      else if (lineCount > 10) {
+        isArtifact = true;
+        type = 'code';
+        name = `${language.toUpperCase()} Code`;
+      }
+
+      if (isArtifact) {
+        artifacts.push({
+          id: `artifact-${message.id}-${artifactId++}`,
+          type,
+          language,
+          name,
+          content: code,
+          timestamp: message.timestamp || Date.now()
+        });
+      }
+    }
+
+    return artifacts;
+  }
+
+  async detectAndSaveArtifacts(messageId) {
+    const chat = this.chats[this.currentChatId];
+    if (!chat) return;
+
+    const message = chat.messages.find(m => m.id === messageId);
+    if (!message) return;
+
+    const artifacts = this.detectArtifacts(message);
+
+    if (artifacts.length > 0) {
+      if (!chat.artifacts) chat.artifacts = [];
+
+      // Add new artifacts
+      artifacts.forEach(artifact => {
+        const existing = chat.artifacts.find(a => a.id === artifact.id);
+        if (!existing) {
+          chat.artifacts.push(artifact);
+        }
+      });
+
+      await this.saveChats();
+      this.updateArtifactsBadge();
+
+      // If artifacts panel is open, refresh it
+      if (this.elements.artifactsTab.classList.contains('active')) {
+        this.loadArtifactsForCurrentChat();
+      }
+    }
+  }
+
+  scanExistingArtifacts() {
+    const chat = this.chats[this.currentChatId];
+    if (!chat || chat._artifactsScanned) return;
+    
+    // Scan all assistant messages for artifacts
+    let foundAny = false;
+    chat.messages.forEach(msg => {
+      if (msg.role === 'assistant') {
+        const artifacts = this.detectArtifacts(msg);
+        if (artifacts.length > 0) {
+          if (!chat.artifacts) chat.artifacts = [];
+          artifacts.forEach(a => {
+            if (!chat.artifacts.find(existing => existing.id === a.id)) {
+              chat.artifacts.push(a);
+              foundAny = true;
+            }
+          });
+        }
+      }
+    });
+    
+    chat._artifactsScanned = true;
+    if (foundAny) {
+      this.saveChats();
+      this.updateArtifactsBadge();
+    }
+  }
+
+  loadArtifactsForCurrentChat() {
+    const chat = this.chats[this.currentChatId];
+    if (!chat) {
+      this.renderArtifacts([]);
+      return;
+    }
+
+    const artifacts = chat.artifacts || [];
+    this.renderArtifacts(artifacts);
+  }
+
+  updateArtifactsBadge() {
+    const chat = this.chats[this.currentChatId];
+    const count = (chat && chat.artifacts) ? chat.artifacts.length : 0;
+
+    if (count > 0) {
+      this.elements.artifactsBadge.textContent = count;
+      this.elements.artifactsBadge.style.display = 'block';
+      this.elements.artifactsTabBadge.textContent = count;
+      this.elements.artifactsTabBadge.style.display = 'inline';
+      this.elements.artifactsBtn.disabled = false;
+    } else {
+      this.elements.artifactsBadge.style.display = 'none';
+      this.elements.artifactsTabBadge.style.display = 'none';
+      this.elements.artifactsBtn.disabled = true;
+    }
+  }
+
+  renderArtifacts(artifacts) {
+    const container = this.elements.artifactsList;
+
+    if (!artifacts || artifacts.length === 0) {
+      container.innerHTML = `
+        <div class="artifacts-empty">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48">
+            <polyline points="16 18 22 12 16 6"></polyline>
+            <polyline points="8 6 2 12 8 18"></polyline>
+          </svg>
+          <p>No artifacts yet</p>
+          <p class="artifacts-empty-hint">Code, HTML, SVG, and diagrams will appear here</p>
+        </div>
+      `;
+      return;
+    }
+
+    // Render artifacts in reverse order (newest first)
+    const sortedArtifacts = [...artifacts].reverse();
+    container.innerHTML = sortedArtifacts.map(artifact => this.renderArtifactCard(artifact)).join('');
+
+    // Attach event listeners
+    sortedArtifacts.forEach(artifact => {
+      this.attachArtifactEventListeners(artifact);
+    });
+  }
+
+  renderArtifactCard(artifact) {
+    const typeIcon = this.getArtifactTypeIcon(artifact.type);
+    const viewToggle = (artifact.type === 'html' || artifact.type === 'svg' || artifact.type === 'markdown')
+      ? this.renderArtifactViewToggle(artifact)
+      : '';
+
+    return `
+      <div class="artifact-card" id="${artifact.id}" data-artifact-id="${artifact.id}">
+        <div class="artifact-card-header">
+          <div class="artifact-card-title">
+            <div class="artifact-type-icon">${typeIcon}</div>
+            <div class="artifact-name">${artifact.name}</div>
+            <span class="artifact-type-badge">${artifact.type}</span>
+          </div>
+          <div class="artifact-card-toggle">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </div>
+        </div>
+        <div class="artifact-card-body">
+          ${viewToggle}
+          <div class="artifact-content" id="${artifact.id}-content">
+            ${this.renderArtifactContent(artifact, 'source')}
+          </div>
+          <div class="artifact-actions">
+            <button class="artifact-action-btn artifact-copy" data-artifact-id="${artifact.id}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              Copy
+            </button>
+            <button class="artifact-action-btn artifact-download" data-artifact-id="${artifact.id}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Download
+            </button>
+            ${artifact.type === 'html' ? `
+            <button class="artifact-action-btn artifact-open primary" data-artifact-id="${artifact.id}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+              Open
+            </button>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  renderArtifactViewToggle(artifact) {
+    return `
+      <div class="artifact-view-toggle">
+        <button class="artifact-view-btn active" data-artifact-id="${artifact.id}" data-view="source">Source</button>
+        <button class="artifact-view-btn" data-artifact-id="${artifact.id}" data-view="preview">Preview</button>
+      </div>
+    `;
+  }
+
+  renderArtifactContent(artifact, view = 'source') {
+    if (view === 'source' || artifact.type === 'code') {
+      return `
+        <div class="artifact-code-block">
+          <pre><code class="language-${artifact.language}">${this.escapeHtml(artifact.content)}</code></pre>
+        </div>
+      `;
+    } else if (view === 'preview') {
+      if (artifact.type === 'html' || artifact.type === 'svg') {
+        const sandboxedContent = artifact.type === 'svg'
+          ? artifact.content
+          : artifact.content;
+        return `
+          <iframe class="artifact-preview-iframe" sandbox="allow-scripts" srcdoc="${this.escapeHtml(sandboxedContent)}"></iframe>
+        `;
+      } else if (artifact.type === 'markdown') {
+        return `
+          <div class="artifact-markdown-preview">${this.renderMarkdown(artifact.content)}</div>
+        `;
+      } else if (artifact.type === 'mermaid') {
+        return `
+          <div class="artifact-mermaid-diagram" id="${artifact.id}-mermaid">${artifact.content}</div>
+        `;
+      } else if (artifact.type === 'csv') {
+        return this.renderCSVTable(artifact.content);
+      }
+    }
+
+    return '';
+  }
+
+  getArtifactTypeIcon(type) {
+    const icons = {
+      code: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>',
+      html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>',
+      svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
+      markdown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg>',
+      mermaid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>',
+      csv: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>'
+    };
+    return icons[type] || icons.code;
+  }
+
+  renderCSVTable(csvContent) {
+    const lines = csvContent.trim().split('\n');
+    if (lines.length < 2) return `<div class="artifact-table-container">Invalid CSV</div>`;
+
+    const headers = lines[0].split(',').map(h => h.trim());
+    const rows = lines.slice(1).map(line => line.split(',').map(cell => cell.trim()));
+
+    const tableHTML = `
+      <div class="artifact-table-container">
+        <table class="artifact-table">
+          <thead>
+            <tr>${headers.map(h => `<th>${this.escapeHtml(h)}</th>`).join('')}</tr>
+          </thead>
+          <tbody>
+            ${rows.map(row => `<tr>${row.map(cell => `<td>${this.escapeHtml(cell)}</td>`).join('')}</tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    return tableHTML;
+  }
+
+  attachArtifactEventListeners(artifact) {
+    // Toggle card collapse
+    const card = document.getElementById(artifact.id);
+    if (!card) return;
+
+    const header = card.querySelector('.artifact-card-header');
+    header.addEventListener('click', () => {
+      card.classList.toggle('collapsed');
+    });
+
+    // View toggle buttons
+    const viewButtons = card.querySelectorAll('.artifact-view-btn');
+    viewButtons.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const view = btn.dataset.view;
+        const artifactId = btn.dataset.artifactId;
+        const artifact = this.getArtifactById(artifactId);
+        if (!artifact) return;
+
+        // Update active button
+        viewButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        // Re-render content
+        const contentDiv = document.getElementById(`${artifactId}-content`);
+        contentDiv.innerHTML = this.renderArtifactContent(artifact, view);
+
+        // If mermaid, render it
+        if (view === 'preview' && artifact.type === 'mermaid') {
+          this.renderMermaidDiagram(artifact);
+        }
+
+        // Apply syntax highlighting if showing source
+        if (view === 'source' && typeof Prism !== 'undefined') {
+          Prism.highlightAllUnder(contentDiv);
+        }
+      });
+    });
+
+    // Copy button
+    const copyBtn = card.querySelector('.artifact-copy');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.copyArtifact(artifact.id);
+      });
+    }
+
+    // Download button
+    const downloadBtn = card.querySelector('.artifact-download');
+    if (downloadBtn) {
+      downloadBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.downloadArtifact(artifact.id);
+      });
+    }
+
+    // Open button
+    const openBtn = card.querySelector('.artifact-open');
+    if (openBtn) {
+      openBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.openArtifactInNewTab(artifact.id);
+      });
+    }
+
+    // Apply syntax highlighting
+    if (typeof Prism !== 'undefined') {
+      Prism.highlightAllUnder(card);
+    }
+  }
+
+  getArtifactById(id) {
+    const chat = this.chats[this.currentChatId];
+    if (!chat || !chat.artifacts) return null;
+    return chat.artifacts.find(a => a.id === id);
+  }
+
+  copyArtifact(id) {
+    const artifact = this.getArtifactById(id);
+    if (!artifact) return;
+
+    navigator.clipboard.writeText(artifact.content).then(() => {
+      const btn = document.querySelector(`.artifact-copy[data-artifact-id="${id}"]`);
+      if (btn) {
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> Copied!';
+        setTimeout(() => {
+          btn.innerHTML = originalText;
+        }, 2000);
+      }
+    });
+  }
+
+  downloadArtifact(id) {
+    const artifact = this.getArtifactById(id);
+    if (!artifact) return;
+
+    const extension = artifact.language || 'txt';
+    const filename = `${artifact.name.toLowerCase().replace(/\s+/g, '-')}.${extension}`;
+    const blob = new Blob([artifact.content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  openArtifactInNewTab(id) {
+    const artifact = this.getArtifactById(id);
+    if (!artifact || artifact.type !== 'html') return;
+
+    const blob = new Blob([artifact.content], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  }
+
+  async renderMermaidDiagram(artifact) {
+    // Lazy load Mermaid.js
+    if (typeof mermaid === 'undefined') {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js';
+      script.onload = () => {
+        mermaid.initialize({ startOnLoad: false, theme: 'dark' });
+        this.renderMermaidDiagram(artifact);
+      };
+      document.head.appendChild(script);
+      return;
+    }
+
+    const container = document.getElementById(`${artifact.id}-mermaid`);
+    if (!container) return;
+
+    try {
+      const { svg } = await mermaid.render(`mermaid-${artifact.id}`, artifact.content);
+      container.innerHTML = svg;
+    } catch (err) {
+      container.innerHTML = `<p style="color: #ef4444; padding: 20px;">Error rendering diagram: ${err.message}</p>`;
+    }
   }
 
   // --- Prompt Management ---
