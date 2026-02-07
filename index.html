@@ -96,6 +96,11 @@
           <div class="chat-model" id="chatModel" title="Current model"></div>
           <div class="chat-tokens" id="chatTokens" title="Estimated tokens in this conversation"></div>
         </div>
+        <button class="intelligence-btn" id="intelligenceBtn" title="Extract & Share conversation intelligence" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2L9 9H2l6 4.5L5.5 21 12 16l6.5 5L16 13.5 22 9h-7z"/>
+          </svg>
+        </button>
         <div class="status" id="status">Disconnected</div>
       </header>
 
@@ -149,6 +154,39 @@
         <p class="disclaimer">ClawGPT connects to your local OpenClaw gateway</p>
       </div>
     </main>
+
+    <!-- Intelligence Panel -->
+    <aside class="intelligence-panel" id="intelligencePanel">
+      <div class="intelligence-resize-handle" id="intelligenceResizeHandle"></div>
+      <div class="intelligence-panel-header">
+        <h2>Conversation Intelligence</h2>
+        <div class="intelligence-panel-actions">
+          <button class="intelligence-refresh-btn" id="intelligenceRefreshBtn" title="Refresh analysis">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+            </svg>
+          </button>
+          <button class="intelligence-download-all-btn" id="intelligenceDownloadAllBtn" title="Download all as markdown">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+          </button>
+          <button class="intelligence-close-btn" id="intelligenceCloseBtn" title="Close panel">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="intelligence-panel-body" id="intelligencePanelBody">
+        <div class="intelligence-empty">
+          <p>Click the sparkle button to analyze this conversation.</p>
+        </div>
+      </div>
+    </aside>
   </div>
 
   <!-- Search Modal -->

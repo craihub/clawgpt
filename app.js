@@ -2478,7 +2478,14 @@ window.CLAWGPT_CONFIG = {
       closeRegenerate: document.getElementById('closeRegenerate'),
       cancelRegenerateBtn: document.getElementById('cancelRegenerateBtn'),
       confirmRegenerateBtn: document.getElementById('confirmRegenerateBtn'),
-      regenerateModelSelect: document.getElementById('regenerateModelSelect')
+      regenerateModelSelect: document.getElementById('regenerateModelSelect'),
+      intelligenceBtn: document.getElementById('intelligenceBtn'),
+      intelligencePanel: document.getElementById('intelligencePanel'),
+      intelligencePanelBody: document.getElementById('intelligencePanelBody'),
+      intelligenceCloseBtn: document.getElementById('intelligenceCloseBtn'),
+      intelligenceRefreshBtn: document.getElementById('intelligenceRefreshBtn'),
+      intelligenceDownloadAllBtn: document.getElementById('intelligenceDownloadAllBtn'),
+      intelligenceResizeHandle: document.getElementById('intelligenceResizeHandle')
     };
 
     // Models list (fetched on connect)
@@ -2755,6 +2762,13 @@ window.CLAWGPT_CONFIG = {
     }
 
     this.elements.menuBtn.addEventListener('click', () => this.toggleSidebar());
+
+    // Intelligence panel
+    this.elements.intelligenceBtn.addEventListener('click', () => this.toggleIntelligencePanel());
+    this.elements.intelligenceCloseBtn.addEventListener('click', () => this.closeIntelligencePanel());
+    this.elements.intelligenceRefreshBtn.addEventListener('click', () => this.runIntelligenceExtraction(true));
+    this.elements.intelligenceDownloadAllBtn.addEventListener('click', () => this.downloadAllIntelligence());
+    this.initIntelligenceResize();
 
     // Sidebar overlay - close sidebar when clicking outside
     const sidebarOverlay = document.getElementById('sidebarOverlay');
@@ -4246,6 +4260,7 @@ Example: [0, 2, 5]`;
 
     this.currentChatId = chatId;
     this._visibleMessageCount = null; // Reset virtualization on chat switch
+    this.closeIntelligencePanel();
     this.renderMessages();
     this.renderChatList();
     this.updateTokenDisplay(); // Also updates model display
@@ -4589,6 +4604,7 @@ Example: [0, 2, 5]`;
 
   renderMessages() {
     const chat = this.currentChatId ? this.chats[this.currentChatId] : null;
+    this.updateIntelligenceButton();
 
     if (!chat || chat.messages.length === 0) {
       this.elements.welcome.style.display = 'flex';
@@ -6631,6 +6647,510 @@ Title:`;
     }
 
     this.pendingTitleGen = null;
+  }
+
+  // ========================================
+  // Intelligence Panel
+  // ========================================
+
+  updateIntelligenceButton() {
+    const chat = this.currentChatId ? this.chats[this.currentChatId] : null;
+    const hasMessages = chat && chat.messages.length > 0;
+    this.elements.intelligenceBtn.disabled = !hasMessages;
+  }
+
+  toggleIntelligencePanel() {
+    const panel = this.elements.intelligencePanel;
+    if (panel.classList.contains('open')) {
+      this.closeIntelligencePanel();
+    } else {
+      this.openIntelligencePanel();
+    }
+  }
+
+  openIntelligencePanel() {
+    const panel = this.elements.intelligencePanel;
+    panel.classList.add('open');
+    this.elements.intelligenceBtn.classList.add('active');
+
+    const chat = this.chats[this.currentChatId];
+    if (chat && chat.intelligenceData) {
+      this.renderIntelligenceResults(chat.intelligenceData);
+    } else {
+      this.runIntelligenceExtraction();
+    }
+  }
+
+  closeIntelligencePanel() {
+    this.elements.intelligencePanel.classList.remove('open');
+    this.elements.intelligenceBtn.classList.remove('active');
+  }
+
+  initIntelligenceResize() {
+    const handle = this.elements.intelligenceResizeHandle;
+    const panel = this.elements.intelligencePanel;
+    let startX, startWidth;
+
+    const onMouseMove = (e) => {
+      const dx = startX - (e.clientX || e.touches[0].clientX);
+      const newWidth = Math.max(280, Math.min(800, startWidth + dx));
+      panel.style.width = newWidth + 'px';
+    };
+
+    const onMouseUp = () => {
+      handle.classList.remove('dragging');
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.removeEventListener('touchmove', onMouseMove);
+      document.removeEventListener('touchend', onMouseUp);
+    };
+
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      startX = e.clientX;
+      startWidth = panel.offsetWidth;
+      handle.classList.add('dragging');
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
+
+    handle.addEventListener('touchstart', (e) => {
+      startX = e.touches[0].clientX;
+      startWidth = panel.offsetWidth;
+      handle.classList.add('dragging');
+      document.addEventListener('touchmove', onMouseMove, { passive: false });
+      document.addEventListener('touchend', onMouseUp);
+    });
+  }
+
+  runIntelligenceExtraction(forceRefresh = false) {
+    const chat = this.chats[this.currentChatId];
+    if (!chat || chat.messages.length === 0) return;
+
+    if (!forceRefresh && chat.intelligenceData) {
+      this.renderIntelligenceResults(chat.intelligenceData);
+      return;
+    }
+
+    // Show loading
+    this.elements.intelligencePanelBody.innerHTML = `
+      <div class="intelligence-loading">
+        <div class="intelligence-spinner"></div>
+        <span>Analyzing conversation...</span>
+      </div>
+    `;
+
+    // Run extraction asynchronously
+    setTimeout(() => {
+      const data = this.extractIntelligence(chat.messages);
+      chat.intelligenceData = data;
+      this.saveChats();
+      this.renderIntelligenceResults(data);
+    }, 50);
+  }
+
+  extractIntelligence(messages) {
+    // Client-side extraction: parse messages for code blocks, URLs, questions,
+    // action-item patterns, and group by rough topic clusters.
+    // TODO: upgrade to AI-powered extraction via gateway
+
+    const clusters = [];
+    const codeSnippets = [];
+    const allLinks = [];
+    const decisions = [];
+    const actionItems = [];
+    const keyPoints = [];
+
+    const actionPatterns = /\b(TODO|FIXME|HACK|action item|will do|need to|should|must|let's|plan to|going to|i'll|we'll|next step|follow up|don't forget)\b/i;
+    const decisionPatterns = /\b(decided|decision|agreed|let's go with|we chose|the approach|settled on|going with|will use|chosen)\b/i;
+    const codeBlockRe = /```(\w*)\n([\s\S]*?)```/g;
+    const urlRe = /https?:\/\/[^\s<>"')\]]+/g;
+
+    for (const msg of messages) {
+      if (!msg.content || !msg.content.trim()) continue;
+      const text = msg.content;
+
+      // Extract code blocks
+      let match;
+      codeBlockRe.lastIndex = 0;
+      while ((match = codeBlockRe.exec(text)) !== null) {
+        codeSnippets.push({
+          language: match[1] || 'text',
+          code: match[2].trim()
+        });
+      }
+
+      // Extract URLs
+      urlRe.lastIndex = 0;
+      while ((match = urlRe.exec(text)) !== null) {
+        const url = match[0].replace(/[.,;:!?)]+$/, '');
+        if (!allLinks.includes(url)) {
+          allLinks.push(url);
+        }
+      }
+
+      // Check for action items (line by line)
+      const lines = text.split('\n');
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        if (actionPatterns.test(trimmed) && trimmed.length < 200) {
+          // Clean up the line
+          const cleaned = trimmed.replace(/^[-*•]\s*/, '').replace(/^#+\s*/, '');
+          if (cleaned.length > 10 && !actionItems.includes(cleaned)) {
+            actionItems.push(cleaned);
+          }
+        }
+
+        if (decisionPatterns.test(trimmed) && trimmed.length < 200) {
+          const cleaned = trimmed.replace(/^[-*•]\s*/, '').replace(/^#+\s*/, '');
+          if (cleaned.length > 10 && !decisions.includes(cleaned)) {
+            decisions.push(cleaned);
+          }
+        }
+      }
+
+      // Extract key points: sentences with substance from assistant messages
+      if (msg.role === 'assistant') {
+        const sentences = text
+          .replace(/```[\s\S]*?```/g, '') // Remove code blocks
+          .split(/[.!?]\s+/)
+          .map(s => s.trim())
+          .filter(s => s.length > 20 && s.length < 200);
+        for (const s of sentences.slice(0, 3)) {
+          keyPoints.push(s);
+        }
+      }
+    }
+
+    // Build topic clusters from message content
+    // Simple approach: group by conversation "phases" based on user messages
+    const topicMessages = [];
+    let currentTopic = null;
+
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      if (!msg.content || !msg.content.trim()) continue;
+
+      if (msg.role === 'user') {
+        // Start a new topic cluster with each user message
+        if (currentTopic) {
+          topicMessages.push(currentTopic);
+        }
+        const preview = msg.content.replace(/```[\s\S]*?```/g, '[code]').trim();
+        currentTopic = {
+          title: this.generateTopicTitle(preview),
+          userMessage: preview.substring(0, 300),
+          assistantPoints: [],
+          codeSnippets: [],
+          links: [],
+          decisions: [],
+          actionItems: []
+        };
+      } else if (msg.role === 'assistant' && currentTopic) {
+        const text = msg.content;
+
+        // Extract code blocks for this topic
+        codeBlockRe.lastIndex = 0;
+        let m;
+        while ((m = codeBlockRe.exec(text)) !== null) {
+          currentTopic.codeSnippets.push({
+            language: m[1] || 'text',
+            code: m[2].trim()
+          });
+        }
+
+        // Extract URLs for this topic
+        urlRe.lastIndex = 0;
+        while ((m = urlRe.exec(text)) !== null) {
+          const url = m[0].replace(/[.,;:!?)]+$/, '');
+          if (!currentTopic.links.includes(url)) {
+            currentTopic.links.push(url);
+          }
+        }
+
+        // Extract key points from assistant
+        const clean = text.replace(/```[\s\S]*?```/g, '').trim();
+        const sentences = clean.split(/[.!?]\s+/).filter(s => s.trim().length > 20 && s.trim().length < 200);
+        for (const s of sentences.slice(0, 5)) {
+          currentTopic.assistantPoints.push(s.trim());
+        }
+
+        // Check for decisions and actions
+        const textLines = text.split('\n');
+        for (const line of textLines) {
+          const trimmed = line.trim();
+          if (decisionPatterns.test(trimmed) && trimmed.length > 10 && trimmed.length < 200) {
+            currentTopic.decisions.push(trimmed.replace(/^[-*•]\s*/, ''));
+          }
+          if (actionPatterns.test(trimmed) && trimmed.length > 10 && trimmed.length < 200) {
+            currentTopic.actionItems.push(trimmed.replace(/^[-*•]\s*/, ''));
+          }
+        }
+      }
+    }
+    if (currentTopic) {
+      topicMessages.push(currentTopic);
+    }
+
+    // If there are very few topics, merge them or create a summary cluster
+    if (topicMessages.length === 0) {
+      topicMessages.push({
+        title: 'Conversation Summary',
+        userMessage: '',
+        assistantPoints: keyPoints.slice(0, 10),
+        codeSnippets: codeSnippets.slice(0, 5),
+        links: allLinks,
+        decisions: decisions.slice(0, 5),
+        actionItems: actionItems.slice(0, 5)
+      });
+    }
+
+    return {
+      clusters: topicMessages,
+      extractedAt: Date.now()
+    };
+  }
+
+  generateTopicTitle(userMessage) {
+    // Generate a short title from the user's message
+    const clean = userMessage
+      .replace(/\[code\]/g, '')
+      .replace(/\n/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (clean.length <= 50) return clean || 'Discussion';
+
+    // Try to find a natural break point
+    const cutoff = clean.substring(0, 50);
+    const lastSpace = cutoff.lastIndexOf(' ');
+    return (lastSpace > 20 ? cutoff.substring(0, lastSpace) : cutoff) + '...';
+  }
+
+  renderIntelligenceResults(data) {
+    const body = this.elements.intelligencePanelBody;
+    if (!data || !data.clusters || data.clusters.length === 0) {
+      body.innerHTML = '<div class="intelligence-empty"><p>No topics found in this conversation.</p></div>';
+      return;
+    }
+
+    let html = '';
+    data.clusters.forEach((cluster, idx) => {
+      const hasContent = cluster.assistantPoints.length > 0 ||
+        cluster.codeSnippets.length > 0 ||
+        cluster.links.length > 0 ||
+        cluster.decisions.length > 0 ||
+        cluster.actionItems.length > 0;
+
+      if (!hasContent && !cluster.userMessage) return;
+
+      html += `<div class="intelligence-card" data-cluster-idx="${idx}">`;
+      html += `<div class="intelligence-card-header" data-action="toggle-card">`;
+      html += `<span class="intelligence-card-title">${this.escapeHtml(cluster.title)}</span>`;
+      html += `<span class="intelligence-card-toggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg></span>`;
+      html += `</div>`;
+      html += `<div class="intelligence-card-body">`;
+
+      if (cluster.assistantPoints.length > 0) {
+        html += `<div class="intelligence-section">`;
+        html += `<div class="intelligence-section-label">Key Points</div>`;
+        html += `<ul>`;
+        for (const p of cluster.assistantPoints.slice(0, 8)) {
+          html += `<li>${this.escapeHtml(p)}</li>`;
+        }
+        html += `</ul></div>`;
+      }
+
+      if (cluster.decisions.length > 0) {
+        html += `<div class="intelligence-section decisions">`;
+        html += `<div class="intelligence-section-label">Decisions</div>`;
+        html += `<ul>`;
+        for (const d of cluster.decisions.slice(0, 5)) {
+          html += `<li>${this.escapeHtml(d)}</li>`;
+        }
+        html += `</ul></div>`;
+      }
+
+      if (cluster.actionItems.length > 0) {
+        html += `<div class="intelligence-section action-items">`;
+        html += `<div class="intelligence-section-label">Action Items</div>`;
+        html += `<ul>`;
+        for (const a of cluster.actionItems.slice(0, 5)) {
+          html += `<li>${this.escapeHtml(a)}</li>`;
+        }
+        html += `</ul></div>`;
+      }
+
+      if (cluster.codeSnippets.length > 0) {
+        html += `<div class="intelligence-section">`;
+        html += `<div class="intelligence-section-label">Code Snippets</div>`;
+        for (const cs of cluster.codeSnippets.slice(0, 3)) {
+          const langClass = cs.language ? `language-${cs.language}` : '';
+          html += `<div class="intelligence-code-snippet">`;
+          html += `<pre><code class="${langClass}">${this.escapeHtml(cs.code)}</code></pre>`;
+          html += `</div>`;
+        }
+        html += `</div>`;
+      }
+
+      if (cluster.links.length > 0) {
+        html += `<div class="intelligence-section">`;
+        html += `<div class="intelligence-section-label">Links</div>`;
+        html += `<ul class="intelligence-links">`;
+        for (const link of cluster.links) {
+          const display = link.length > 60 ? link.substring(0, 57) + '...' : link;
+          html += `<li><a href="${this.escapeHtml(link)}" target="_blank" rel="noopener noreferrer">${this.escapeHtml(display)}</a></li>`;
+        }
+        html += `</ul></div>`;
+      }
+
+      // Card actions
+      html += `<div class="intelligence-card-actions">`;
+      html += `<button class="intelligence-card-action-btn" data-action="copy-card" data-idx="${idx}" title="Copy as markdown">`;
+      html += `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+      html += `Copy</button>`;
+      html += `<button class="intelligence-card-action-btn" data-action="download-card" data-idx="${idx}" title="Download as markdown">`;
+      html += `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
+      html += `Download</button>`;
+      html += `</div>`;
+
+      html += `</div></div>`;
+    });
+
+    body.innerHTML = html;
+
+    // Syntax highlight code snippets
+    body.querySelectorAll('pre code[class*="language-"]').forEach(el => {
+      if (typeof Prism !== 'undefined') {
+        Prism.highlightElement(el);
+      }
+    });
+
+    // Set up event delegation once
+    if (!this._intelligenceClickBound) {
+      this._intelligenceClickBound = true;
+      body.addEventListener('click', (e) => {
+        const toggleHeader = e.target.closest('[data-action="toggle-card"]');
+        if (toggleHeader) {
+          const card = toggleHeader.closest('.intelligence-card');
+          card.classList.toggle('collapsed');
+          return;
+        }
+
+        const copyBtn = e.target.closest('[data-action="copy-card"]');
+        if (copyBtn) {
+          const idx = parseInt(copyBtn.dataset.idx);
+          this.copyIntelligenceCard(idx, copyBtn);
+          return;
+        }
+
+        const downloadBtn = e.target.closest('[data-action="download-card"]');
+        if (downloadBtn) {
+          const idx = parseInt(downloadBtn.dataset.idx);
+          this.downloadIntelligenceCard(idx);
+          return;
+        }
+      });
+    }
+  }
+
+  clusterToMarkdown(cluster) {
+    let md = `## ${cluster.title}\n\n`;
+
+    if (cluster.assistantPoints.length > 0) {
+      md += `### Key Points\n`;
+      for (const p of cluster.assistantPoints) {
+        md += `- ${p}\n`;
+      }
+      md += '\n';
+    }
+
+    if (cluster.decisions.length > 0) {
+      md += `### Decisions\n`;
+      for (const d of cluster.decisions) {
+        md += `- ${d}\n`;
+      }
+      md += '\n';
+    }
+
+    if (cluster.actionItems.length > 0) {
+      md += `### Action Items\n`;
+      for (const a of cluster.actionItems) {
+        md += `- [ ] ${a}\n`;
+      }
+      md += '\n';
+    }
+
+    if (cluster.codeSnippets.length > 0) {
+      md += `### Code Snippets\n`;
+      for (const cs of cluster.codeSnippets) {
+        md += `\`\`\`${cs.language}\n${cs.code}\n\`\`\`\n\n`;
+      }
+    }
+
+    if (cluster.links.length > 0) {
+      md += `### Links\n`;
+      for (const link of cluster.links) {
+        md += `- ${link}\n`;
+      }
+      md += '\n';
+    }
+
+    return md;
+  }
+
+  copyIntelligenceCard(idx, btn) {
+    const chat = this.chats[this.currentChatId];
+    if (!chat || !chat.intelligenceData) return;
+    const cluster = chat.intelligenceData.clusters[idx];
+    if (!cluster) return;
+
+    const md = this.clusterToMarkdown(cluster);
+    navigator.clipboard.writeText(md).then(() => {
+      btn.classList.add('copied');
+      setTimeout(() => btn.classList.remove('copied'), 1500);
+    });
+  }
+
+  downloadIntelligenceCard(idx) {
+    const chat = this.chats[this.currentChatId];
+    if (!chat || !chat.intelligenceData) return;
+    const cluster = chat.intelligenceData.clusters[idx];
+    if (!cluster) return;
+
+    const md = this.clusterToMarkdown(cluster);
+    const filename = cluster.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase().substring(0, 40) + '.md';
+    this.downloadFile(filename, md, 'text/markdown');
+  }
+
+  downloadAllIntelligence() {
+    const chat = this.chats[this.currentChatId];
+    if (!chat || !chat.intelligenceData) return;
+
+    const chatTitle = (chat.title || 'conversation').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+    let md = `# Conversation Intelligence: ${chat.title || 'Untitled'}\n\n`;
+    md += `_Extracted: ${new Date(chat.intelligenceData.extractedAt).toLocaleString()}_\n\n---\n\n`;
+
+    for (const cluster of chat.intelligenceData.clusters) {
+      md += this.clusterToMarkdown(cluster);
+      md += '---\n\n';
+    }
+
+    this.downloadFile(`intelligence-${chatTitle}.md`, md, 'text/markdown');
+  }
+
+  downloadFile(filename, content, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 }
 
