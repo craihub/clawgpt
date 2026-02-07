@@ -106,6 +106,12 @@
         </div>
       </div>
 
+      <button class="scroll-to-bottom-btn" id="scrollToBottomBtn" style="display: none;" title="Scroll to bottom">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 5v14M19 12l-7 7-7-7"/>
+        </svg>
+      </button>
+
       <div class="input-area">
         <div class="image-preview" id="imagePreview"></div>
         <div class="input-container">
@@ -228,6 +234,13 @@
             Show Message Tokens
           </label>
           <span class="setting-hint">Display estimated token count per message</span>
+        </div>
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="desktopNotifications">
+            Desktop Notifications
+          </label>
+          <span class="setting-hint">Show notification when assistant replies (only when tab is not focused)</span>
         </div>
         <div class="settings-divider"></div>
         <div class="settings-section-title">Data</div>
@@ -378,6 +391,37 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Context Menu for Chat Items -->
+  <div class="chat-context-menu" id="chatContextMenu">
+    <button class="chat-context-menu-item" data-action="rename">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>
+      Rename
+    </button>
+    <button class="chat-context-menu-item" data-action="regenerate-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+      </svg>
+      Regenerate Title
+    </button>
+    <button class="chat-context-menu-item" data-action="pin">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="17" x2="12" y2="22"/>
+        <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/>
+      </svg>
+      <span class="pin-text">Pin</span>
+    </button>
+    <button class="chat-context-menu-item danger" data-action="delete">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3 6 5 6 21 6"/>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+      </svg>
+      Delete
+    </button>
   </div>
 
   <!-- Shortcuts Modal -->

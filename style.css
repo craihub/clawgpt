@@ -187,45 +187,6 @@ body {
   background: rgba(16, 163, 127, 0.1);
 }
 
-.chat-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-
-.chat-item:hover .chat-actions {
-  opacity: 1;
-}
-
-.chat-item .delete-btn,
-.chat-item .pin-btn,
-.chat-item .rename-btn {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 4px;
-  font-size: 12px;
-  border-radius: 4px;
-  line-height: 1;
-}
-
-.chat-item .delete-btn:hover {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
-}
-
-.chat-item .pin-btn:hover {
-  background: rgba(16, 163, 127, 0.1);
-}
-
-.chat-item .rename-btn:hover {
-  background: rgba(99, 102, 241, 0.1);
-  color: #818cf8;
-}
-
 /* Branch chat styling */
 .chat-item.branch {
   padding-left: 24px;
@@ -254,9 +215,15 @@ body {
   height: 12px;
 }
 
-.chat-item .rename-btn svg {
-  width: 14px;
-  height: 14px;
+.pin-indicator {
+  display: inline-flex;
+  margin-right: 4px;
+  opacity: 0.6;
+}
+
+.pin-indicator .pin-icon {
+  width: 10px;
+  height: 10px;
 }
 
 .pin-icon {
@@ -268,10 +235,6 @@ body {
 .pin-icon.pinned {
   stroke: var(--accent-color);
   fill: var(--accent-color);
-}
-
-.pin-btn:hover .pin-icon {
-  stroke: var(--accent-color);
 }
 
 .chat-item.dragging {
@@ -290,6 +253,58 @@ body {
 
 .chat-item:active {
   cursor: grabbing;
+}
+
+/* Context menu for chat items */
+.chat-context-menu {
+  position: fixed;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 10000;
+  min-width: 160px;
+  padding: 4px 0;
+  display: none;
+}
+
+.chat-context-menu.visible {
+  display: block;
+}
+
+.chat-context-menu-item {
+  width: 100%;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: left;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: background 0.15s;
+}
+
+.chat-context-menu-item:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.chat-context-menu-item svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.chat-context-menu-item.danger {
+  color: #ef4444;
+}
+
+.chat-context-menu-item.danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
 }
 
 .expand-pinned-btn {
@@ -520,6 +535,7 @@ body {
   flex: 1;
   overflow-y: auto;
   padding: 24px 0;
+  scroll-behavior: smooth;
 }
 
 .welcome {
@@ -855,7 +871,7 @@ body {
   max-width: 768px;
   margin: 0 auto;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 12px;
   background: var(--input-bg);
   border: 1px solid var(--border-color);
@@ -1191,6 +1207,36 @@ body {
 .stop-btn svg {
   width: 18px;
   height: 18px;
+}
+
+.scroll-to-bottom-btn {
+  position: fixed;
+  bottom: 140px;
+  right: 32px;
+  width: 40px;
+  height: 40px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.scroll-to-bottom-btn:hover {
+  background: var(--surface-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.scroll-to-bottom-btn svg {
+  width: 20px;
+  height: 20px;
+  color: var(--text-primary);
 }
 
 .disclaimer {

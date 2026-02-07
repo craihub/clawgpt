@@ -1,0 +1,21 @@
+{
+    auto_https off
+}
+
+:8080 {
+    # Serve ClawGPT files
+    root * /home/hsatarian/clawgpt
+    file_server
+    
+    # Proxy WebSocket to OpenClaw gateway
+    @websocket {
+        header Connection *Upgrade*
+        header Upgrade websocket
+    }
+
+    reverse_proxy @websocket localhost:18789 {
+        header_up X-Forwarded-Proto https
+        header_up X-Forwarded-Host openclaw.tail3ed768.ts.net:8443
+ 	header_up X-Forwarded-For {remote_host}
+    }
+}

@@ -199,6 +199,7 @@ class ClawGPT {
       this.smartSearch = settings.smartSearch !== false;
       this.semanticSearch = settings.semanticSearch || false;
       this.showTokens = settings.showTokens !== false;
+      this.desktopNotifications = settings.desktopNotifications || false;
     } else {
       // No saved settings - use config.js values or defaults
       this.gatewayUrl = config.gatewayUrl || 'ws://127.0.0.1:18789';
@@ -208,6 +209,7 @@ class ClawGPT {
       this.smartSearch = true;
       this.semanticSearch = false;
       this.showTokens = true;
+      this.desktopNotifications = false;
     }
 
     // Log if using config.js
@@ -261,7 +263,8 @@ class ClawGPT {
       darkMode: this.darkMode,
       smartSearch: this.smartSearch,
       semanticSearch: this.semanticSearch,
-      showTokens: this.showTokens
+      showTokens: this.showTokens,
+      desktopNotifications: this.desktopNotifications
     };
 
     // Only save connection settings if NOT using config.js
@@ -2445,6 +2448,7 @@ window.CLAWGPT_CONFIG = {
       messageInput: document.getElementById('messageInput'),
       sendBtn: document.getElementById('sendBtn'),
       stopBtn: document.getElementById('stopBtn'),
+      scrollToBottomBtn: document.getElementById('scrollToBottomBtn'),
       newChatBtn: document.getElementById('newChatBtn'),
       settingsBtn: document.getElementById('settingsBtn'),
       settingsModal: document.getElementById('settingsModal'),
@@ -2464,6 +2468,7 @@ window.CLAWGPT_CONFIG = {
       cancelRenameBtn: document.getElementById('cancelRenameBtn'),
       saveRenameBtn: document.getElementById('saveRenameBtn'),
       renameChatInput: document.getElementById('renameChatInput'),
+      chatContextMenu: document.getElementById('chatContextMenu'),
       editMessageModal: document.getElementById('editMessageModal'),
       closeEditMessage: document.getElementById('closeEditMessage'),
       cancelEditMessageBtn: document.getElementById('cancelEditMessageBtn'),
@@ -2484,6 +2489,11 @@ window.CLAWGPT_CONFIG = {
     this.elements.authToken.value = this.authToken;
     this.elements.sessionKeyInput.value = this.sessionKey;
     this.elements.darkMode.checked = this.darkMode;
+    
+    // Set checkbox values
+    const desktopNotificationsEl = document.getElementById('desktopNotifications');
+    if (desktopNotificationsEl) desktopNotificationsEl.checked = this.desktopNotifications;
+    
     this.applyTheme();
 
     // Event listeners
@@ -2510,6 +2520,39 @@ window.CLAWGPT_CONFIG = {
 
     this.elements.newChatBtn.addEventListener('click', () => this.newChat());
     this.elements.stopBtn.addEventListener('click', () => this.stopGeneration());
+    
+    // Scroll to bottom button
+    this.elements.scrollToBottomBtn.addEventListener('click', () => {
+      this.elements.messages.scrollTop = this.elements.messages.scrollHeight;
+    });
+    
+    // Show/hide scroll to bottom button based on scroll position
+    this.elements.messages.addEventListener('scroll', () => {
+      const messagesEl = this.elements.messages;
+      const isNearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 100;
+      this.elements.scrollToBottomBtn.style.display = isNearBottom ? 'none' : 'flex';
+    });
+
+    // Spacebar to scroll to bottom (only when not typing in input fields)
+    document.addEventListener('keydown', (e) => {
+      // Only trigger if spacebar pressed
+      if (e.key !== ' ' && e.code !== 'Space') return;
+      
+      // Don't trigger if typing in input/textarea/contenteditable
+      const target = e.target;
+      if (target.tagName === 'INPUT' || 
+          target.tagName === 'TEXTAREA' || 
+          target.isContentEditable) {
+        return;
+      }
+      
+      // Don't trigger if any modifier keys pressed
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+      
+      // Force scroll to bottom
+      e.preventDefault(); // Prevent page scroll
+      this.elements.messages.scrollTop = this.elements.messages.scrollHeight;
+    });
 
     // Voice input button
     this.initVoiceInput();
@@ -2819,6 +2862,34 @@ window.CLAWGPT_CONFIG = {
       }
     });
 
+    // Context menu event listeners
+    this.contextMenuChatId = null;
+    this.elements.chatContextMenu.addEventListener('click', (e) => {
+      const item = e.target.closest('.chat-context-menu-item');
+      if (!item || !this.contextMenuChatId) return;
+      
+      const action = item.dataset.action;
+      const chatId = this.contextMenuChatId; // Save ID before hiding menu
+      this.hideContextMenu();
+      
+      if (action === 'rename') {
+        this.renameChat(chatId);
+      } else if (action === 'regenerate-title') {
+        this.generateAITitle(chatId);
+      } else if (action === 'pin') {
+        this.togglePin(chatId);
+      } else if (action === 'delete') {
+        this.deleteChat(chatId);
+      }
+    });
+
+    // Hide context menu when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!this.elements.chatContextMenu.contains(e.target)) {
+        this.hideContextMenu();
+      }
+    });
+
     // Edit message modal event listeners
     this.elements.closeEditMessage.addEventListener('click', () => this.closeEditMessageModal());
     this.elements.cancelEditMessageBtn.addEventListener('click', () => this.closeEditMessageModal());
@@ -3075,8 +3146,69 @@ window.CLAWGPT_CONFIG = {
       this.updateTokenDisplay();
     }
 
+    const desktopNotificationsEl = document.getElementById('desktopNotifications');
+    if (desktopNotificationsEl) {
+      const wasEnabled = this.desktopNotifications;
+      this.desktopNotifications = desktopNotificationsEl.checked;
+      
+      // Request permission if enabling for the first time
+      if (this.desktopNotifications && !wasEnabled) {
+        this.requestNotificationPermission();
+      }
+    }
+
     this.saveSettings();
     this.closeSettings();
+  }
+
+  async requestNotificationPermission() {
+    if (!('Notification' in window)) {
+      console.log('Browser does not support notifications');
+      return false;
+    }
+
+    if (Notification.permission === 'granted') {
+      return true;
+    }
+
+    if (Notification.permission !== 'denied') {
+      const permission = await Notification.requestPermission();
+      return permission === 'granted';
+    }
+
+    return false;
+  }
+
+  showNotification(title, body) {
+    // Only show if enabled and browser supports it
+    if (!this.desktopNotifications || !('Notification' in window)) {
+      return;
+    }
+
+    // Only show if tab is not visible (don't notify when user is actively viewing)
+    if (document.visibilityState === 'visible') {
+      return;
+    }
+
+    // Check permission
+    if (Notification.permission === 'granted') {
+      const notification = new Notification(title, {
+        body: body,
+        icon: '/favicon.ico',
+        badge: '/favicon.ico',
+        tag: 'clawgpt-message', // Replace previous notification
+        requireInteraction: false
+      });
+
+      // Focus window when notification is clicked
+      notification.onclick = () => {
+        window.focus();
+        notification.close();
+      };
+
+      // Auto-close after 5 seconds
+      setTimeout(() => notification.close(), 5000);
+    }
   }
 
   updateSettingsButtons() {
@@ -4322,13 +4454,18 @@ Example: [0, 2, 5]`;
 
     this.elements.chatList.innerHTML = this.sanitize(html);
 
-    // Add click handlers
+    // Add click and context menu handlers
     this.elements.chatList.querySelectorAll('.chat-item').forEach(item => {
       const chatId = item.dataset.id;
 
       item.addEventListener('click', (e) => {
-        if (e.target.closest('.pin-btn') || e.target.closest('.delete-btn') || e.target.closest('.rename-btn')) return;
         this.selectChat(chatId);
+      });
+
+      // Right-click to show context menu
+      item.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        this.showContextMenu(chatId, e.clientX, e.clientY);
       });
 
       // Drag handlers for all items
@@ -4336,28 +4473,6 @@ Example: [0, 2, 5]`;
       item.addEventListener('dragover', (e) => this.handleDragOver(e, chatId));
       item.addEventListener('drop', (e) => this.handleDrop(e, chatId));
       item.addEventListener('dragend', (e) => this.handleDragEnd(e));
-    });
-
-    this.elements.chatList.querySelectorAll('.delete-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.deleteChat(btn.dataset.id);
-      });
-    });
-
-    this.elements.chatList.querySelectorAll('.pin-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.togglePin(btn.dataset.id);
-      });
-    });
-
-    this.elements.chatList.querySelectorAll('.rename-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        console.log('Rename btn clicked, dataset.id:', btn.dataset.id);
-        e.stopPropagation();
-        this.renameChat(btn.dataset.id);
-      });
     });
 
     const expandBtn = document.getElementById('expandPinnedBtn');
@@ -4371,15 +4486,10 @@ Example: [0, 2, 5]`;
 
   renderChatItem(id, chat, isPinned, isBranch = false) {
     const isActive = id === this.currentChatId;
-    const pinTitle = isPinned ? 'Unpin' : 'Pin';
     const hasSummary = chat.metadata?.summary;
     const pinIcon = `<svg class="pin-icon ${isPinned ? 'pinned' : ''}" viewBox="0 0 24 24" fill="${isPinned ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <line x1="12" y1="17" x2="12" y2="22"/>
       <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/>
-    </svg>`;
-    const editIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
     </svg>`;
     const branchIcon = `<svg class="branch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <line x1="6" y1="3" x2="6" y2="15"/>
@@ -4389,15 +4499,11 @@ Example: [0, 2, 5]`;
     </svg>`;
     const summaryIndicator = hasSummary ? `<span class="summary-indicator" title="${this.escapeHtml(chat.metadata.summary)}">✨</span>` : '';
     const branchIndicator = isBranch ? `<span class="branch-indicator">${branchIcon}</span>` : '';
+    const pinIndicator = isPinned ? `<span class="pin-indicator">${pinIcon}</span>` : '';
 
     return `
       <div class="chat-item ${isActive ? 'active' : ''} ${isPinned ? 'pinned' : ''} ${isBranch ? 'branch' : ''}" data-id="${id}" data-pinned="${isPinned}" draggable="true">
-        <span class="chat-title">${branchIndicator}${summaryIndicator}${this.escapeHtml(chat.title)}</span>
-        <div class="chat-actions">
-          <button class="rename-btn" data-id="${id}" title="Rename">${editIcon}</button>
-          <button class="pin-btn" data-id="${id}" title="${pinTitle}">${pinIcon}</button>
-          <button class="delete-btn" data-id="${id}" title="Delete">&times;</button>
-        </div>
+        <span class="chat-title" title="${this.escapeHtml(chat.title)}">${branchIndicator}${summaryIndicator}${pinIndicator}${this.escapeHtml(chat.title)}</span>
       </div>
     `;
   }
@@ -4446,6 +4552,39 @@ Example: [0, 2, 5]`;
     const modal = document.getElementById('renameModal');
     modal.classList.remove('open');
     this.renamingChatId = null;
+  }
+
+  showContextMenu(chatId, x, y) {
+    this.contextMenuChatId = chatId;
+    const menu = this.elements.chatContextMenu;
+    const chat = this.chats[chatId];
+    
+    // Update pin button text
+    const pinText = menu.querySelector('.pin-text');
+    if (pinText) {
+      pinText.textContent = chat?.pinned ? 'Unpin' : 'Pin';
+    }
+    
+    // Position the menu
+    menu.style.left = `${x}px`;
+    menu.style.top = `${y}px`;
+    menu.classList.add('visible');
+    
+    // Adjust position if menu goes off-screen
+    setTimeout(() => {
+      const rect = menu.getBoundingClientRect();
+      if (rect.right > window.innerWidth) {
+        menu.style.left = `${x - rect.width}px`;
+      }
+      if (rect.bottom > window.innerHeight) {
+        menu.style.top = `${y - rect.height}px`;
+      }
+    }, 0);
+  }
+
+  hideContextMenu() {
+    this.elements.chatContextMenu.classList.remove('visible');
+    this.contextMenuChatId = null;
   }
 
   renderMessages() {
@@ -5827,7 +5966,13 @@ Example: [0, 2, 5]`;
   }
 
   scrollToBottom() {
-    this.elements.messages.scrollTop = this.elements.messages.scrollHeight;
+    // Only auto-scroll if user is already near the bottom (within 100px)
+    const messagesEl = this.elements.messages;
+    const isNearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 100;
+    
+    if (isNearBottom) {
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
   }
 
   async sendMessage(textOverride = null) {
@@ -5869,10 +6014,11 @@ Example: [0, 2, 5]`;
       this.currentChatId = this.generateId();
       this.chats[this.currentChatId] = {
         id: this.currentChatId,
-        title: (text || 'Image').slice(0, 30) + ((text || '').length > 30 ? '...' : ''),
+        title: 'New chat',
         messages: [],
         createdAt: Date.now(),
-        updatedAt: Date.now()
+        updatedAt: Date.now(),
+        needsAITitle: true // Flag to generate title after first response
       };
     }
 
@@ -5987,6 +6133,13 @@ Example: [0, 2, 5]`;
     this.streamBuffer = '';
     this.updateStreamingUI();
     this.renderMessages();
+    
+    // Double RAF ensures layout is complete before scroll
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        this.elements.messages.scrollTop = this.elements.messages.scrollHeight;
+      });
+    });
 
     try {
       // Check if we're switching to a different chat
@@ -6094,6 +6247,14 @@ Example: [0, 2, 5]`;
       return;
     }
 
+    // Handle title generation session responses
+    if (payload.sessionKey === '__clawgpt_title_gen') {
+      if ((state === 'final' || state === 'aborted') && content) {
+        this.handleTitleResponse(content);
+      }
+      return;
+    }
+
     // Check if this event is for our session (handle both short and full session keys)
     if (payload.sessionKey &&
         payload.sessionKey !== this.sessionKey &&
@@ -6191,6 +6352,11 @@ Example: [0, 2, 5]`;
     this.chats[this.currentChatId].updatedAt = Date.now();
     this.saveChats(); // Save without broadcasting full chat (incremental relay below)
 
+    // Show desktop notification if enabled
+    const chat = this.chats[this.currentChatId];
+    const preview = content.substring(0, 100) + (content.length > 100 ? '...' : '');
+    this.showNotification(chat.title || 'ClawGPT', preview);
+
     // Send only the new message to phone (not the entire chat)
     if (this.relayEncrypted) {
       this.sendRelayMessage({
@@ -6201,7 +6367,6 @@ Example: [0, 2, 5]`;
     }
 
     // Store in clawgpt-memory for search
-    const chat = this.chats[this.currentChatId];
     this.memoryStorage.storeMessage(
       this.currentChatId,
       chat.title,
@@ -6210,6 +6375,13 @@ Example: [0, 2, 5]`;
     ).catch(err => console.warn('Memory storage failed:', err));
 
     this.renderMessages();
+
+    // Generate AI title after first response if needed
+    if (chat.needsAITitle && chat.messages.length >= 2) {
+      delete chat.needsAITitle; // Clear flag
+      this.saveChats();
+      this.generateAITitle(this.currentChatId);
+    }
 
     // Check if we should generate/update summary
     this.maybeGenerateSummary(this.currentChatId);
@@ -6351,6 +6523,114 @@ Return this exact JSON structure:
     }
 
     this.pendingSummary = null;
+  }
+
+  // ===== AI TITLE GENERATION =====
+
+  async generateAITitle(chatId) {
+    const chat = this.chats[chatId];
+    if (!chat || !this.connected) return;
+
+    // Need at least one exchange to generate a title
+    if (chat.messages.length < 2) return;
+
+    // Build conversation context (first 2-3 exchanges max)
+    const messagesToUse = chat.messages.slice(0, Math.min(6, chat.messages.length));
+    const conversation = messagesToUse.map(m => {
+      const role = m.role === 'user' ? 'User' : 'Assistant';
+      // Truncate very long messages
+      const content = m.content.length > 300
+        ? m.content.slice(0, 300) + '...'
+        : m.content;
+      return `${role}: ${content}`;
+    }).join('\n\n');
+
+    const prompt = `Based on this conversation, generate a concise 3-5 word title. Return ONLY the title text, no quotes, no explanation:
+
+${conversation}
+
+Title:`;
+
+    try {
+      console.log('Generating AI title for chat:', chatId);
+
+      // Track title prompt tokens
+      this.addTokens(this.estimateTokens(prompt));
+
+      // Use a temporary session
+      const result = await this.request('chat.send', {
+        sessionKey: '__clawgpt_title_gen',
+        message: prompt,
+        deliver: false,
+        idempotencyKey: 'title-' + chatId + '-' + Date.now()
+      });
+
+      // Response comes via events
+      this.pendingTitleGen = { chatId, startedAt: Date.now() };
+
+      // Show visual feedback
+      this.showToast('Generating title...', false);
+
+    } catch (error) {
+      console.error('Failed to generate title:', error);
+      this.showToast('Title generation failed', true);
+    }
+  }
+
+  handleTitleResponse(content) {
+    if (!this.pendingTitleGen) return;
+
+    // Track title response tokens
+    this.addTokens(this.estimateTokens(content));
+
+    const { chatId } = this.pendingTitleGen;
+    const chat = this.chats[chatId];
+
+    if (!chat) {
+      this.pendingTitleGen = null;
+      return;
+    }
+
+    try {
+      // Clean up the response (remove quotes, extra whitespace, etc.)
+      let title = content.trim()
+        .replace(/^["']|["']$/g, '') // Remove surrounding quotes
+        .replace(/^Title:\s*/i, '') // Remove "Title:" prefix if present
+        .replace(/\n.*/s, '') // Take only first line
+        .trim();
+
+      // Limit length
+      if (title.length > 50) {
+        title = title.substring(0, 47) + '...';
+      }
+
+      // Use the title if it looks reasonable
+      if (title.length > 0 && title.length < 100) {
+        const oldTitle = chat.title;
+        chat.title = title;
+        this.saveChats();
+        
+        // Force UI update
+        this.renderChatList();
+        
+        // If this is the current chat, update the header too
+        if (this.currentChatId === chatId) {
+          this.renderMessages();
+        }
+        
+        console.log(`AI title updated: "${oldTitle}" → "${title}"`);
+        this.showToast('Title updated', false);
+      } else {
+        console.warn('Generated title looks invalid:', title);
+        this.showToast('Title generation failed', true);
+      }
+
+    } catch (error) {
+      console.error('Failed to parse title response:', error, content);
+      this.showToast('Title generation failed', true);
+    }
+
+    this.pendingTitleGen = null;
   }
 }
 
