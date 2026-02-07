@@ -1,6 +1,14 @@
 # Local config with auth token - DO NOT COMMIT
 config.js
 
+# Dependencies
+node_modules/
+
+# Local server (not part of upstream)
+server.js
+package.json
+package-lock.json
+
 # OS files
 .DS_Store
 Thumbs.db
