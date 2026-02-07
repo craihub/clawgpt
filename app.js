@@ -9587,8 +9587,13 @@ If multiple files, return multiple objects in the array.`;
     // Called when AudioQueue finishes playing all chunks
     // Only proceed if we're done streaming AND still in speaking state
     if (this.talkModeActive && this._talkStreamingComplete && this.talkModeState === 'speaking') {
-      console.log('[TalkMode] Audio queue empty, all done speaking');
-      this.onTtsDone();
+      // Small delay to ensure last audio chunk fully plays out
+      setTimeout(() => {
+        if (this.talkModeActive && this._talkStreamingComplete && this.talkModeState === 'speaking') {
+          console.log('[TalkMode] Audio queue empty, all done speaking');
+          this.onTtsDone();
+        }
+      }, 300);
     }
   }
 
