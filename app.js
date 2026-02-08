@@ -2709,7 +2709,29 @@ window.CLAWGPT_CONFIG = {
       notificationBadge: document.getElementById('notificationBadge'),
       notificationDropdown: document.getElementById('notificationDropdown'),
       notificationDropdownBody: document.getElementById('notificationDropdownBody'),
-      notificationClearBtn: document.getElementById('notificationClearBtn')
+      notificationClearBtn: document.getElementById('notificationClearBtn'),
+      promptLibraryBtn: document.getElementById('promptLibraryBtn'),
+      promptLibraryModal: document.getElementById('promptLibraryModal'),
+      closePromptLibrary: document.getElementById('closePromptLibrary'),
+      promptLibrarySearch: document.getElementById('promptLibrarySearch'),
+      promptLibraryCategoryFilter: document.getElementById('promptLibraryCategoryFilter'),
+      promptLibraryCards: document.getElementById('promptLibraryCards'),
+      promptLibraryListView: document.getElementById('promptLibraryListView'),
+      promptLibraryFormView: document.getElementById('promptLibraryFormView'),
+      promptLibraryVarsView: document.getElementById('promptLibraryVarsView'),
+      promptLibraryNewBtn: document.getElementById('promptLibraryNewBtn'),
+      promptLibraryBackBtn: document.getElementById('promptLibraryBackBtn'),
+      promptLibraryFormTitle: document.getElementById('promptLibraryFormTitle'),
+      promptFormTitle: document.getElementById('promptFormTitle'),
+      promptFormCategory: document.getElementById('promptFormCategory'),
+      promptFormContent: document.getElementById('promptFormContent'),
+      promptFormSaveBtn: document.getElementById('promptFormSaveBtn'),
+      promptFormCancelBtn: document.getElementById('promptFormCancelBtn'),
+      promptLibraryVarsBackBtn: document.getElementById('promptLibraryVarsBackBtn'),
+      promptLibraryVarsTitle: document.getElementById('promptLibraryVarsTitle'),
+      promptLibraryVarsForm: document.getElementById('promptLibraryVarsForm'),
+      promptVarsCancelBtn: document.getElementById('promptVarsCancelBtn'),
+      promptVarsInsertBtn: document.getElementById('promptVarsInsertBtn')
     };
 
     // Session dashboard state
@@ -2839,6 +2861,9 @@ window.CLAWGPT_CONFIG = {
 
     // Image upload
     this.initImageUpload();
+
+    // Prompt Library
+    this.initPromptLibrary();
 
     this.elements.settingsBtn.addEventListener('click', () => this.openSettings());
     this.elements.closeSettings.addEventListener('click', () => this.closeSettings());
@@ -10285,6 +10310,286 @@ If multiple files, return multiple objects in the array.`;
       </div>
     `;
   }
+
+  // ===== Prompt Library =====
+
+  initPromptLibrary() {
+    this.prompts = this.loadPrompts();
+    this._promptEditId = null;
+    this._promptUseId = null;
+
+    const el = this.elements;
+    if (!el.promptLibraryBtn) return;
+
+    el.promptLibraryBtn.addEventListener('click', () => this.openPromptLibrary());
+    el.closePromptLibrary.addEventListener('click', () => this.closePromptLibrary());
+    el.promptLibraryModal.addEventListener('click', (e) => {
+      if (e.target === el.promptLibraryModal) this.closePromptLibrary();
+    });
+
+    el.promptLibraryNewBtn.addEventListener('click', () => this.showPromptForm(null));
+    el.promptLibraryBackBtn.addEventListener('click', () => this.showPromptListView());
+    el.promptFormCancelBtn.addEventListener('click', () => this.showPromptListView());
+    el.promptFormSaveBtn.addEventListener('click', () => this.savePromptForm());
+
+    el.promptLibraryVarsBackBtn.addEventListener('click', () => this.showPromptListView());
+    el.promptVarsCancelBtn.addEventListener('click', () => this.showPromptListView());
+    el.promptVarsInsertBtn.addEventListener('click', () => this.insertPromptWithVars());
+
+    el.promptLibrarySearch.addEventListener('input', () => this.renderPromptList());
+    el.promptLibraryCategoryFilter.addEventListener('change', () => this.renderPromptList());
+  }
+
+  loadPrompts() {
+    const stored = localStorage.getItem('clawgpt-prompts');
+    if (stored) return JSON.parse(stored);
+
+    // First use — seed starter prompts
+    const starters = [
+      {
+        id: this.generatePromptId(),
+        title: 'Code Review',
+        content: 'Review this {{language}} code for bugs, performance issues, and best practices:\n\n{{code}}',
+        category: 'Coding',
+        variables: ['language', 'code'],
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      },
+      {
+        id: this.generatePromptId(),
+        title: 'Summarize',
+        content: 'Summarize the following text in {{format}} format:\n\n{{text}}',
+        category: 'Writing',
+        variables: ['format', 'text'],
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      },
+      {
+        id: this.generatePromptId(),
+        title: 'Explain Topic',
+        content: 'Explain {{topic}} as if I\'m a {{audience}} level learner',
+        category: 'General',
+        variables: ['topic', 'audience'],
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      },
+      {
+        id: this.generatePromptId(),
+        title: 'Debug Error',
+        content: 'I\'m getting this error in my {{language}} project:\n\n{{error}}\n\nHere\'s the relevant code:\n\n{{code}}\n\nExplain what\'s causing it and how to fix it.',
+        category: 'Coding',
+        variables: ['language', 'error', 'code'],
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      }
+    ];
+    localStorage.setItem('clawgpt-prompts', JSON.stringify(starters));
+    return starters;
+  }
+
+  savePrompts() {
+    localStorage.setItem('clawgpt-prompts', JSON.stringify(this.prompts));
+  }
+
+  generatePromptId() {
+    return 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+
+  extractVariables(content) {
+    const matches = content.match(/\{\{(\w+)\}\}/g);
+    if (!matches) return [];
+    return [...new Set(matches.map(m => m.slice(2, -2)))];
+  }
+
+  openPromptLibrary() {
+    this.showPromptListView();
+    this.elements.promptLibraryModal.classList.add('open');
+    this.elements.promptLibrarySearch.value = '';
+    this.elements.promptLibraryCategoryFilter.value = 'all';
+    this.updatePromptCategoryOptions();
+    this.renderPromptList();
+    setTimeout(() => this.elements.promptLibrarySearch.focus(), 100);
+  }
+
+  closePromptLibrary() {
+    this.elements.promptLibraryModal.classList.remove('open');
+  }
+
+  showPromptListView() {
+    this.elements.promptLibraryListView.style.display = '';
+    this.elements.promptLibraryFormView.style.display = 'none';
+    this.elements.promptLibraryVarsView.style.display = 'none';
+    this.renderPromptList();
+  }
+
+  showPromptForm(promptId) {
+    this.elements.promptLibraryListView.style.display = 'none';
+    this.elements.promptLibraryFormView.style.display = '';
+    this.elements.promptLibraryVarsView.style.display = 'none';
+    this._promptEditId = promptId;
+
+    if (promptId) {
+      const prompt = this.prompts.find(p => p.id === promptId);
+      if (!prompt) return this.showPromptListView();
+      this.elements.promptLibraryFormTitle.textContent = 'Edit Prompt';
+      this.elements.promptFormTitle.value = prompt.title;
+      this.elements.promptFormCategory.value = prompt.category;
+      this.elements.promptFormContent.value = prompt.content;
+    } else {
+      this.elements.promptLibraryFormTitle.textContent = 'New Prompt';
+      this.elements.promptFormTitle.value = '';
+      this.elements.promptFormCategory.value = '';
+      this.elements.promptFormContent.value = '';
+    }
+    setTimeout(() => this.elements.promptFormTitle.focus(), 100);
+  }
+
+  savePromptForm() {
+    const title = this.elements.promptFormTitle.value.trim();
+    const category = this.elements.promptFormCategory.value.trim() || 'General';
+    const content = this.elements.promptFormContent.value.trim();
+
+    if (!title || !content) return;
+
+    const variables = this.extractVariables(content);
+
+    if (this._promptEditId) {
+      const idx = this.prompts.findIndex(p => p.id === this._promptEditId);
+      if (idx >= 0) {
+        this.prompts[idx] = { ...this.prompts[idx], title, category, content, variables, updatedAt: Date.now() };
+      }
+    } else {
+      this.prompts.push({
+        id: this.generatePromptId(),
+        title, content, category, variables,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      });
+    }
+
+    this.savePrompts();
+    this.updatePromptCategoryOptions();
+    this.showPromptListView();
+  }
+
+  deletePrompt(id) {
+    this.prompts = this.prompts.filter(p => p.id !== id);
+    this.savePrompts();
+    this.renderPromptList();
+  }
+
+  usePrompt(id) {
+    const prompt = this.prompts.find(p => p.id === id);
+    if (!prompt) return;
+
+    if (prompt.variables.length > 0) {
+      this.showVarsForm(prompt);
+    } else {
+      this.elements.messageInput.value = prompt.content;
+      this.elements.messageInput.dispatchEvent(new Event('input'));
+      this.elements.messageInput.focus();
+      this.closePromptLibrary();
+    }
+  }
+
+  showVarsForm(prompt) {
+    this.elements.promptLibraryListView.style.display = 'none';
+    this.elements.promptLibraryFormView.style.display = 'none';
+    this.elements.promptLibraryVarsView.style.display = '';
+    this._promptUseId = prompt.id;
+
+    this.elements.promptLibraryVarsTitle.textContent = prompt.title;
+    this.elements.promptLibraryVarsForm.innerHTML = prompt.variables.map(v => `
+      <div class="form-group">
+        <label for="prompt-var-${v}">{{${v}}}</label>
+        <input type="text" id="prompt-var-${v}" data-var="${v}" placeholder="Enter ${v}...">
+      </div>
+    `).join('');
+
+    const firstInput = this.elements.promptLibraryVarsForm.querySelector('input');
+    if (firstInput) setTimeout(() => firstInput.focus(), 100);
+  }
+
+  insertPromptWithVars() {
+    const prompt = this.prompts.find(p => p.id === this._promptUseId);
+    if (!prompt) return;
+
+    let result = prompt.content;
+    const inputs = this.elements.promptLibraryVarsForm.querySelectorAll('input[data-var]');
+    inputs.forEach(input => {
+      const varName = input.dataset.var;
+      const value = input.value;
+      result = result.replaceAll(`{{${varName}}}`, value);
+    });
+
+    this.elements.messageInput.value = result;
+    this.elements.messageInput.dispatchEvent(new Event('input'));
+    this.elements.messageInput.focus();
+    this.closePromptLibrary();
+  }
+
+  updatePromptCategoryOptions() {
+    const select = this.elements.promptLibraryCategoryFilter;
+    const current = select.value;
+    const defaultCats = ['General', 'Coding', 'Writing', 'Analysis'];
+    const customCats = this.prompts.map(p => p.category).filter(c => c && !defaultCats.includes(c));
+    const allCats = [...defaultCats, ...new Set(customCats)];
+
+    select.innerHTML = '<option value="all">All</option>' +
+      allCats.map(c => `<option value="${c}">${c}</option>`).join('');
+    select.value = current;
+  }
+
+  renderPromptList() {
+    const search = (this.elements.promptLibrarySearch.value || '').toLowerCase();
+    const category = this.elements.promptLibraryCategoryFilter.value;
+
+    let filtered = this.prompts;
+    if (category !== 'all') {
+      filtered = filtered.filter(p => p.category === category);
+    }
+    if (search) {
+      filtered = filtered.filter(p =>
+        p.title.toLowerCase().includes(search) ||
+        p.content.toLowerCase().includes(search)
+      );
+    }
+
+    if (filtered.length === 0) {
+      this.elements.promptLibraryCards.innerHTML = '<div class="prompt-library-empty">No prompts found</div>';
+      return;
+    }
+
+    this.elements.promptLibraryCards.innerHTML = filtered.map(p => {
+      const preview = p.content.length > 100 ? p.content.slice(0, 100) + '...' : p.content;
+      return `
+        <div class="prompt-card" data-id="${p.id}">
+          <div class="prompt-card-header">
+            <span class="prompt-card-title">${this.escapeHtml(p.title)}</span>
+            <span class="prompt-card-category">${this.escapeHtml(p.category)}</span>
+          </div>
+          <div class="prompt-card-preview">${this.escapeHtml(preview)}</div>
+          <div class="prompt-card-actions">
+            <button class="prompt-use-btn" data-action="use" data-id="${p.id}">Use</button>
+            <button data-action="edit" data-id="${p.id}">Edit</button>
+            <button class="prompt-delete-btn" data-action="delete" data-id="${p.id}">Delete</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Delegate click events
+    this.elements.promptLibraryCards.onclick = (e) => {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+      const action = btn.dataset.action;
+      const id = btn.dataset.id;
+      if (action === 'use') this.usePrompt(id);
+      else if (action === 'edit') this.showPromptForm(id);
+      else if (action === 'delete') this.deletePrompt(id);
+    };
+  }
+
 }
 
 // Initialize
