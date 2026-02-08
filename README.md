@@ -37,6 +37,129 @@ ClawGPT connects directly to your OpenClaw Gateway via WebSocket, giving you a r
 
 ## Architecture
 
+### Response Control
+- [x] **Regenerate responses** — Get a new answer with one click
+- [x] **Model selection** — Choose different AI models per regeneration
+- [x] **Per-chat model display** — See which model is being used
+- [x] **Token counter** — Track estimated token usage per conversation
+
+### Voice
+- [x] **Voice input** — Speech-to-text via browser or native (Android) speech recognition
+- [x] **Read aloud** — Text-to-speech on any AI response
+- [x] **Push-to-talk** — Hold the mic button to record (mobile)
+- [x] **Conversation mode** — Double-tap mic for hands-free back-and-forth (mobile)
+
+### Files & Media
+- [x] **Image attachments** — Attach and preview images inline
+- [x] **File attachments** — Send text files, code, PDFs, spreadsheets
+- [x] **Code highlighting** — Syntax highlighting for 100+ languages via Prism.js
+- [x] **Code copy buttons** — One-click copy for any code block
+
+### Data & Storage
+- [x] **IndexedDB storage** — Virtually unlimited local storage (no 5MB limit)
+- [x] **Export chats** — Download all conversations as JSON backup
+- [x] **Import chats** — Restore or merge chats from backup file
+- [x] **Auto-migration** — Seamlessly migrates from localStorage if upgrading
+
+### Cross-Device Memory (clawgpt-memory)
+- [x] **Automatic sync** — Messages sync between desktop and mobile in real-time
+- [x] **File-based storage** — Conversations saved to `clawgpt-memory/` folder
+- [x] **AI-accessible** — Your OpenClaw agent can read your ClawGPT history
+- [x] **Works offline** — Syncs when devices reconnect via relay
+- [x] **JSONL format** — Human-readable, easy to search and backup
+
+## 🔒 Security
+
+### Local Mode
+When running on the same network as your computer, ClawGPT connects directly to your local OpenClaw gateway. Your data never leaves your network.
+
+### Remote Access (Relay Mode)
+Need to use ClawGPT from your phone when you're away from home? Enable Relay Mode for secure remote access.
+
+| Security Feature | Description |
+|-----------------|-------------|
+| **End-to-End Encryption** | XSalsa20-Poly1305 — your messages are encrypted before leaving your device |
+| **Zero-Knowledge Relay** | The relay server only sees encrypted blobs, never your actual messages |
+| **Perfect Forward Secrecy** | New encryption keys generated for each session |
+| **Visual Verification** | Matching words on both devices confirms no man-in-the-middle |
+| **No Token Exposure** | Your auth token is never sent through the relay |
+| **Chat History Sync** | Your chats sync automatically between desktop and phone |
+
+**Crypto details:** X25519 key exchange, XSalsa20-Poly1305 authenticated encryption, powered by [TweetNaCl.js](https://tweetnacl.js.org/).
+
+> Don't trust our relay? [Self-host your own](https://github.com/craihub/clawgpt-relay) — it's just a simple Node.js server.
+
+## 🚀 Quick Start
+
+### Step 1: Install OpenClaw
+
+1. Install [Node.js](https://nodejs.org/) (LTS version)
+
+2. Open a terminal and run:
+   ```bash
+   npm install -g openclaw
+   openclaw wizard
+   ```
+
+3. When asked how to authenticate, choose **OAuth** to use your existing Claude.ai subscription (no extra cost!)
+
+4. Start the gateway:
+   ```bash
+   openclaw gateway
+   ```
+
+You're now talking to Claude through OpenClaw.
+
+---
+
+### Step 2: Set up ClawGPT
+
+Just tell OpenClaw:
+
+> **Set up ClawGPT for me: https://github.com/craihub/clawgpt**
+
+That's it. OpenClaw will handle the rest.
+
+---
+
+### Manual setup (if you prefer)
+
+<details>
+<summary>Click to expand manual instructions</summary>
+
+1. [Download ClawGPT ZIP](https://github.com/craihub/clawgpt/archive/refs/heads/main.zip)
+
+2. Extract to your **home folder** as `clawgpt`:
+   - **Mac/Linux:** `~/clawgpt/`
+   - **Windows:** `C:\Users\YourName\clawgpt\`
+
+3. Allow ClawGPT to connect to your gateway:
+   ```bash
+   openclaw config set gateway.controlUi.allowedOrigins '["http://localhost:8080"]'
+   ```
+
+4. Start the web server (in the clawgpt folder):
+   ```bash
+   python3 -m http.server 8080
+   ```
+
+5. Open http://localhost:8080
+
+6. The setup wizard will ask for your token. Ask OpenClaw:
+   > *"What's my gateway token?"*
+
+> **Can't find your home folder?** Ask OpenClaw: *"open my clawgpt folder"*
+
+</details>
+
+---
+
+### For developers
+
+```bash
+git clone https://github.com/craihub/clawgpt.git ~/clawgpt
+cd ~/clawgpt
+python3 -m http.server 8080
 ```
 Browser (ClawGPT)
     ↕ WebSocket
