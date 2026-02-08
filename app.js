@@ -4050,7 +4050,16 @@ Example: [0, 2, 5]`;
     // Store pending request
     this.pendingRequests.set(connectMsg.id, {
       resolve: () => {},
-      reject: (err) => console.error('Connect failed:', err)
+      reject: (err) => {
+        console.error('Connect failed:', err);
+        const msg = err?.message || String(err);
+        if (msg.includes('origin not allowed')) {
+          const origin = window.location.origin;
+          const cmd = `openclaw config set gateway.controlUi.allowedOrigins '["${origin}"]'`;
+          this.setStatus(`Origin not allowed. Run: ${cmd}`, false);
+          this.showToast(`Origin blocked by gateway. Run in terminal:\n${cmd}\nThen refresh.`, true);
+        }
+      }
     });
   }
 
