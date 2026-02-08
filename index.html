@@ -254,6 +254,24 @@
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
           </svg>
         </button>
+        <div class="notification-bell-wrapper">
+          <button class="notification-bell" id="notificationBell" title="Notifications">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+            <span class="notification-badge" id="notificationBadge" style="display:none;">0</span>
+          </button>
+          <div class="notification-dropdown" id="notificationDropdown" style="display:none;">
+            <div class="notification-dropdown-header">
+              <span>Notifications</span>
+              <button class="notification-clear-btn" id="notificationClearBtn" title="Clear all">Clear</button>
+            </div>
+            <div class="notification-dropdown-body" id="notificationDropdownBody">
+              <div class="notification-empty">No notifications</div>
+            </div>
+          </div>
+        </div>
         <div class="status" id="status">Disconnected</div>
       </header>
 
@@ -489,6 +507,9 @@
       </div>
     </aside>
   </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toastContainer"></div>
 
   <!-- Talk Mode Overlay -->
   <div class="talk-mode-overlay" id="talkModeOverlay">

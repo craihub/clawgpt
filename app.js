@@ -2489,24 +2489,114 @@ window.CLAWGPT_CONFIG = {
     }
   }
 
-  showToast(message, isError = false) {
-    // Remove existing toast
-    const existing = document.querySelector('.toast');
-    if (existing) existing.remove();
+  showToast(message, isErrorOrOptions = false) {
+    // Support legacy call: showToast(msg, true) and new call: showToast(title, msg, options)
+    let title, body, options;
+    if (typeof isErrorOrOptions === 'object' && isErrorOrOptions !== null) {
+      // New API: showToast(title, message, options) — but called as showToast(title, options)
+      // Actually detect: if second arg is object, it's options with message as title
+      title = message;
+      options = isErrorOrOptions;
+      body = options.message || '';
+    } else if (typeof arguments[1] === 'string') {
+      // showToast(title, message, options?)
+      title = message;
+      body = arguments[1];
+      options = arguments[2] || {};
+    } else {
+      // Legacy: showToast(message, isError)
+      title = message;
+      body = '';
+      options = { type: isErrorOrOptions ? 'error' : 'info', duration: 3000, legacy: true };
+    }
+
+    const type = options.type || 'info';
+    const duration = options.duration || 5000;
+    const onClick = options.onClick || null;
+    const sessionKey = options.sessionKey || null;
+
+    // For legacy single-line toasts, use the old bottom-center style
+    if (options.legacy) {
+      const existing = document.querySelector('.toast');
+      if (existing) existing.remove();
+      const toast = document.createElement('div');
+      toast.className = `toast ${type === 'error' ? 'toast-error' : 'toast-success'}`;
+      toast.textContent = title;
+      document.body.appendChild(toast);
+      requestAnimationFrame(() => toast.classList.add('show'));
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+      return;
+    }
+
+    // New stacking toast system
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+
+    // Max 5 visible toasts
+    const toasts = container.querySelectorAll('.toast-notification');
+    if (toasts.length >= 5) {
+      const oldest = toasts[0];
+      oldest.classList.add('fade-out');
+      setTimeout(() => oldest.remove(), 300);
+    }
+
+    const iconSvg = type === 'error'
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>'
+      : type === 'warning'
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+      : type === 'success'
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
 
     const toast = document.createElement('div');
-    toast.className = `toast ${isError ? 'toast-error' : 'toast-success'}`;
-    toast.textContent = message;
-    document.body.appendChild(toast);
+    toast.className = `toast-notification toast-type-${type}`;
+    toast.innerHTML = `
+      <div class="toast-notification-icon">${iconSvg}</div>
+      <div class="toast-notification-body">
+        <div class="toast-notification-title">${this.escapeHtml(title)}</div>
+        ${body ? `<div class="toast-notification-message">${this.escapeHtml(body)}</div>` : ''}
+      </div>
+      <button class="toast-notification-close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    `;
 
-    // Animate in
+    // Close button
+    toast.querySelector('.toast-notification-close').addEventListener('click', (e) => {
+      e.stopPropagation();
+      toast.classList.add('fade-out');
+      setTimeout(() => toast.remove(), 300);
+    });
+
+    // Click handler
+    toast.addEventListener('click', () => {
+      if (onClick) {
+        onClick();
+      } else if (sessionKey) {
+        this.switchSession(sessionKey);
+      }
+      toast.classList.add('fade-out');
+      setTimeout(() => toast.remove(), 300);
+    });
+
+    container.appendChild(toast);
     requestAnimationFrame(() => toast.classList.add('show'));
 
-    // Remove after 3s
+    // Auto-dismiss
     setTimeout(() => {
-      toast.classList.remove('show');
-      setTimeout(() => toast.remove(), 300);
-    }, 3000);
+      if (toast.parentNode) {
+        toast.classList.add('fade-out');
+        setTimeout(() => toast.remove(), 300);
+      }
+    }, duration);
+
+    // Store in notification history
+    if (sessionKey || type !== 'info') {
+      this.addNotification({ title, message: body, type, sessionKey, timestamp: Date.now() });
+    }
   }
 
   // UI initialization
@@ -2614,7 +2704,12 @@ window.CLAWGPT_CONFIG = {
       cronModalClose: document.getElementById('cronModalClose'),
       cronModalTitle: document.getElementById('cronModalTitle'),
       cronForm: document.getElementById('cronForm'),
-      cronFormCancel: document.getElementById('cronFormCancel')
+      cronFormCancel: document.getElementById('cronFormCancel'),
+      notificationBell: document.getElementById('notificationBell'),
+      notificationBadge: document.getElementById('notificationBadge'),
+      notificationDropdown: document.getElementById('notificationDropdown'),
+      notificationDropdownBody: document.getElementById('notificationDropdownBody'),
+      notificationClearBtn: document.getElementById('notificationClearBtn')
     };
 
     // Session dashboard state
@@ -2628,6 +2723,9 @@ window.CLAWGPT_CONFIG = {
 
     // Models list (fetched on connect)
     this.availableModels = [];
+
+    // Initialize notification system
+    this.initNotifications();
 
     // Apply settings to UI
     this.elements.gatewayUrl.value = this.gatewayUrl;
@@ -4952,6 +5050,28 @@ Example: [0, 2, 5]`;
     // Handle chat events (streaming)
     if (msg.type === 'event' && msg.event === 'chat') {
       this.handleChatEvent(msg.payload);
+      return;
+    }
+
+    // Handle cron completion events
+    if (msg.type === 'event' && msg.event === 'cron.completed') {
+      const jobName = msg.payload?.jobName || msg.payload?.name || 'Cron job';
+      this.showToast(jobName, 'Cron job completed', {
+        type: 'success',
+        duration: 5000,
+        sessionKey: msg.payload?.sessionKey
+      });
+      return;
+    }
+
+    // Handle sub-agent spawn completion events
+    if (msg.type === 'event' && msg.event === 'sessions.spawn.completed') {
+      const sessionLabel = msg.payload?.sessionKey || 'Sub-agent';
+      this.showToast(`${sessionLabel}`, 'Sub-agent finished', {
+        type: 'success',
+        duration: 5000,
+        sessionKey: msg.payload?.sessionKey
+      });
       return;
     }
   }
@@ -7478,7 +7598,16 @@ Example: [0, 2, 5]`;
     if (payload.sessionKey &&
         payload.sessionKey !== this.sessionKey &&
         !payload.sessionKey.endsWith(':' + this.sessionKey)) {
-      console.log('Ignoring event for different session:', payload.sessionKey, 'vs', this.sessionKey);
+      // Show notification for activity in other sessions
+      if (state === 'final' || state === 'aborted') {
+        const sessionLabel = payload.sessionKey.includes(':') ? payload.sessionKey.split(':').pop() : payload.sessionKey;
+        const preview = content ? content.substring(0, 80) + (content.length > 80 ? '...' : '') : 'Response completed';
+        this.showToast(`Session: ${sessionLabel}`, preview, {
+          type: 'info',
+          duration: 5000,
+          sessionKey: payload.sessionKey
+        });
+      }
       return; // Different session
     }
 
@@ -10013,6 +10142,136 @@ If multiple files, return multiple objects in the array.`;
       console.error('Failed to save file:', error);
       this.showToast('Failed to save file: ' + error.message);
     }
+  }
+
+  // ====== Notification System ======
+
+  initNotifications() {
+    this.notifications = [];
+    this.unreadCount = 0;
+    this.notificationDropdownOpen = false;
+
+    const bell = this.elements.notificationBell;
+    const dropdown = this.elements.notificationDropdown;
+    const clearBtn = this.elements.notificationClearBtn;
+
+    if (bell) {
+      bell.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleNotificationDropdown();
+      });
+    }
+
+    if (clearBtn) {
+      clearBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.clearNotifications();
+      });
+    }
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (this.notificationDropdownOpen && dropdown && !dropdown.contains(e.target) && !bell.contains(e.target)) {
+        this.closeNotificationDropdown();
+      }
+    });
+  }
+
+  addNotification(notification) {
+    if (!this.notifications) this.notifications = [];
+    this.notifications.unshift(notification);
+    // Keep last 50
+    if (this.notifications.length > 50) this.notifications.length = 50;
+    this.unreadCount = (this.unreadCount || 0) + 1;
+    this.updateNotificationBadge();
+    if (this.notificationDropdownOpen) this.renderNotificationDropdown();
+  }
+
+  updateNotificationBadge() {
+    const badge = this.elements.notificationBadge;
+    if (!badge) return;
+    if (this.unreadCount > 0) {
+      badge.style.display = '';
+      badge.textContent = this.unreadCount > 99 ? '99+' : this.unreadCount;
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+
+  toggleNotificationDropdown() {
+    if (this.notificationDropdownOpen) {
+      this.closeNotificationDropdown();
+    } else {
+      this.openNotificationDropdown();
+    }
+  }
+
+  openNotificationDropdown() {
+    const dropdown = this.elements.notificationDropdown;
+    if (!dropdown) return;
+    this.notificationDropdownOpen = true;
+    dropdown.style.display = 'flex';
+    this.unreadCount = 0;
+    this.updateNotificationBadge();
+    this.renderNotificationDropdown();
+  }
+
+  closeNotificationDropdown() {
+    const dropdown = this.elements.notificationDropdown;
+    if (!dropdown) return;
+    this.notificationDropdownOpen = false;
+    dropdown.style.display = 'none';
+  }
+
+  renderNotificationDropdown() {
+    const body = this.elements.notificationDropdownBody;
+    if (!body) return;
+
+    if (!this.notifications || this.notifications.length === 0) {
+      body.innerHTML = '<div class="notification-empty">No notifications</div>';
+      return;
+    }
+
+    body.innerHTML = this.notifications.map((n) => {
+      const timeStr = this.formatNotificationTime(n.timestamp);
+      const iconSvg = n.type === 'success'
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+      return `<div class="notification-item" data-session-key="${this.escapeHtml(n.sessionKey || '')}">
+        <div class="notification-item-icon">${iconSvg}</div>
+        <div class="notification-item-body">
+          <div class="notification-item-title">${this.escapeHtml(n.title)}</div>
+          ${n.message ? `<div class="notification-item-message">${this.escapeHtml(n.message)}</div>` : ''}
+        </div>
+        <div class="notification-item-time">${timeStr}</div>
+      </div>`;
+    }).join('');
+
+    // Click handlers for items
+    body.querySelectorAll('.notification-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const sessionKey = item.dataset.sessionKey;
+        if (sessionKey) {
+          this.switchSession(sessionKey);
+        }
+        this.closeNotificationDropdown();
+      });
+    });
+  }
+
+  formatNotificationTime(timestamp) {
+    const diff = Date.now() - timestamp;
+    if (diff < 60000) return 'now';
+    if (diff < 3600000) return Math.floor(diff / 60000) + 'm';
+    if (diff < 86400000) return Math.floor(diff / 3600000) + 'h';
+    return Math.floor(diff / 86400000) + 'd';
+  }
+
+  clearNotifications() {
+    this.notifications = [];
+    this.unreadCount = 0;
+    this.updateNotificationBadge();
+    this.renderNotificationDropdown();
   }
 
   showWorkspaceEmpty(message) {
