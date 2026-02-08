@@ -1,3 +1,57 @@
+// Audio playback queue for sequential TTS chunk playback
+class AudioQueue {
+  constructor(onEmpty) {
+    this.queue = [];
+    this.isPlaying = false;
+    this.onEmpty = onEmpty;
+    this._currentAudio = null;
+  }
+
+  enqueue(audioBlob) {
+    this.queue.push(audioBlob);
+    if (!this.isPlaying) this.playNext();
+  }
+
+  async playNext() {
+    if (this.queue.length === 0) {
+      this.isPlaying = false;
+      if (this.onEmpty) this.onEmpty();
+      return;
+    }
+    this.isPlaying = true;
+    const blob = this.queue.shift();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    this._currentAudio = audio;
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      this._currentAudio = null;
+      this.playNext();
+    };
+    audio.onerror = () => {
+      URL.revokeObjectURL(url);
+      this._currentAudio = null;
+      this.playNext();
+    };
+    try {
+      await audio.play();
+    } catch (e) {
+      console.error('AudioQueue play error:', e);
+      this._currentAudio = null;
+      this.playNext();
+    }
+  }
+
+  clear() {
+    this.queue = [];
+    if (this._currentAudio) {
+      this._currentAudio.pause();
+      this._currentAudio = null;
+    }
+    this.isPlaying = false;
+  }
+}
+
 class ClawGPT {
   // Stop words for search filtering (class constant for performance)
   static STOP_WORDS = new Set([
@@ -199,6 +253,14 @@ class ClawGPT {
       this.smartSearch = settings.smartSearch !== false;
       this.semanticSearch = settings.semanticSearch || false;
       this.showTokens = settings.showTokens !== false;
+      this.desktopNotifications = settings.desktopNotifications || false;
+      // Voice / Talk Mode settings
+      this.ttsProvider = settings.ttsProvider || 'browser';
+      this.elevenlabsApiKey = settings.elevenlabsApiKey || '';
+      this.elevenlabsVoiceId = settings.elevenlabsVoiceId || 'JBFqnCBsd6RMkjVDRZzb';
+      this.elevenlabsModel = settings.elevenlabsModel || 'eleven_turbo_v2_5';
+      this.streamingTts = settings.streamingTts !== false;
+      this.autoListenAfterResponse = settings.autoListenAfterResponse !== false;
     } else {
       // No saved settings - use config.js values or defaults
       this.gatewayUrl = config.gatewayUrl || 'ws://127.0.0.1:18789';
@@ -208,6 +270,14 @@ class ClawGPT {
       this.smartSearch = true;
       this.semanticSearch = false;
       this.showTokens = true;
+      this.desktopNotifications = false;
+      // Voice / Talk Mode defaults
+      this.ttsProvider = 'browser';
+      this.elevenlabsApiKey = '';
+      this.elevenlabsVoiceId = 'JBFqnCBsd6RMkjVDRZzb';
+      this.elevenlabsModel = 'eleven_turbo_v2_5';
+      this.streamingTts = true;
+      this.autoListenAfterResponse = true;
     }
 
     // Log if using config.js
@@ -261,7 +331,15 @@ class ClawGPT {
       darkMode: this.darkMode,
       smartSearch: this.smartSearch,
       semanticSearch: this.semanticSearch,
-      showTokens: this.showTokens
+      showTokens: this.showTokens,
+      desktopNotifications: this.desktopNotifications,
+      // Voice / Talk Mode
+      ttsProvider: this.ttsProvider,
+      elevenlabsApiKey: this.elevenlabsApiKey,
+      elevenlabsVoiceId: this.elevenlabsVoiceId,
+      elevenlabsModel: this.elevenlabsModel,
+      streamingTts: this.streamingTts,
+      autoListenAfterResponse: this.autoListenAfterResponse
     };
 
     // Only save connection settings if NOT using config.js
@@ -2445,6 +2523,7 @@ window.CLAWGPT_CONFIG = {
       messageInput: document.getElementById('messageInput'),
       sendBtn: document.getElementById('sendBtn'),
       stopBtn: document.getElementById('stopBtn'),
+      scrollToBottomBtn: document.getElementById('scrollToBottomBtn'),
       newChatBtn: document.getElementById('newChatBtn'),
       settingsBtn: document.getElementById('settingsBtn'),
       settingsModal: document.getElementById('settingsModal'),
@@ -2464,6 +2543,7 @@ window.CLAWGPT_CONFIG = {
       cancelRenameBtn: document.getElementById('cancelRenameBtn'),
       saveRenameBtn: document.getElementById('saveRenameBtn'),
       renameChatInput: document.getElementById('renameChatInput'),
+      chatContextMenu: document.getElementById('chatContextMenu'),
       editMessageModal: document.getElementById('editMessageModal'),
       closeEditMessage: document.getElementById('closeEditMessage'),
       cancelEditMessageBtn: document.getElementById('cancelEditMessageBtn'),
@@ -2473,8 +2553,78 @@ window.CLAWGPT_CONFIG = {
       closeRegenerate: document.getElementById('closeRegenerate'),
       cancelRegenerateBtn: document.getElementById('cancelRegenerateBtn'),
       confirmRegenerateBtn: document.getElementById('confirmRegenerateBtn'),
-      regenerateModelSelect: document.getElementById('regenerateModelSelect')
+      regenerateModelSelect: document.getElementById('regenerateModelSelect'),
+      intelligenceBtn: document.getElementById('intelligenceBtn'),
+      rightPanel: document.getElementById('rightPanel'),
+      rightPanelCloseBtn: document.getElementById('rightPanelCloseBtn'),
+      rightPanelResizeHandle: document.getElementById('rightPanelResizeHandle'),
+      intelligenceTab: document.getElementById('intelligenceTab'),
+      artifactsTab: document.getElementById('artifactsTab'),
+      intelligencePanel: document.getElementById('intelligencePanel'),
+      intelligencePanelBody: document.getElementById('intelligencePanelBody'),
+      intelligenceResults: document.getElementById('intelligenceResults'),
+      intelligenceGenerateBtn: document.getElementById('intelligenceGenerateBtn'),
+      intelligenceDownloadAllBtn: document.getElementById('intelligenceDownloadAllBtn'),
+      intelligenceResizeHandle: document.getElementById('intelligenceResizeHandle'),
+      artifactsBtn: document.getElementById('artifactsBtn'),
+      artifactsBadge: document.getElementById('artifactsBadge'),
+      artifactsTabBadge: document.getElementById('artifactsTabBadge'),
+      artifactsPanel: document.getElementById('artifactsPanel'),
+      artifactsPanelBody: document.getElementById('artifactsPanelBody'),
+      artifactsList: document.getElementById('artifactsList'),
+      intelligencePromptSelect: document.getElementById('intelligencePromptSelect'),
+      intelligencePromptViewBtn: document.getElementById('intelligencePromptViewBtn'),
+      intelligencePromptEditor: document.getElementById('intelligencePromptEditor'),
+      intelligencePromptTextarea: document.getElementById('intelligencePromptTextarea'),
+      intelligencePromptName: document.getElementById('intelligencePromptName'),
+      intelligencePromptSaveBtn: document.getElementById('intelligencePromptSaveBtn'),
+      intelligencePromptCancelBtn: document.getElementById('intelligencePromptCancelBtn'),
+      intelligenceInfo: document.getElementById('intelligenceInfo'),
+      intelligenceVersionSelect: document.getElementById('intelligenceVersionSelect'),
+      intelligenceVersionControls: document.getElementById('intelligenceVersionControls'),
+      intelligenceReplaceCheck: document.getElementById('intelligenceReplaceCheck'),
+      intelligenceFooter: document.getElementById('intelligenceFooter'),
+      workspaceBtn: document.getElementById('workspaceBtn'),
+      workspaceTab: document.getElementById('workspaceTab'),
+      workspacePanel: document.getElementById('workspacePanel'),
+      workspacePanelBody: document.getElementById('workspacePanelBody'),
+      workspacePath: document.getElementById('workspacePath'),
+      workspaceTree: document.getElementById('workspaceTree'),
+      workspaceRefreshBtn: document.getElementById('workspaceRefreshBtn'),
+      workspaceViewer: document.getElementById('workspaceViewer'),
+      workspaceViewerFilename: document.getElementById('workspaceViewerFilename'),
+      workspaceViewerContent: document.getElementById('workspaceViewerContent'),
+      workspaceViewerCode: document.getElementById('workspaceViewerCode'),
+      workspaceViewerEditBtn: document.getElementById('workspaceViewerEditBtn'),
+      workspaceViewerCloseBtn: document.getElementById('workspaceViewerCloseBtn'),
+      workspaceEditor: document.getElementById('workspaceEditor'),
+      workspaceEditorTextarea: document.getElementById('workspaceEditorTextarea'),
+      workspaceEditorSaveBtn: document.getElementById('workspaceEditorSaveBtn'),
+      workspaceEditorCancelBtn: document.getElementById('workspaceEditorCancelBtn'),
+      sessionsBtn: document.getElementById('sessionsBtn'),
+      sessionDashboard: document.getElementById('sessionDashboard'),
+      sessionDashboardClose: document.getElementById('sessionDashboardClose'),
+      sessionDashboardBody: document.getElementById('sessionDashboardBody'),
+      cronBtn: document.getElementById('cronBtn'),
+      cronDashboard: document.getElementById('cronDashboard'),
+      cronDashboardClose: document.getElementById('cronDashboardClose'),
+      cronDashboardBody: document.getElementById('cronDashboardBody'),
+      cronCreateBtn: document.getElementById('cronCreateBtn'),
+      cronModal: document.getElementById('cronModal'),
+      cronModalClose: document.getElementById('cronModalClose'),
+      cronModalTitle: document.getElementById('cronModalTitle'),
+      cronForm: document.getElementById('cronForm'),
+      cronFormCancel: document.getElementById('cronFormCancel')
     };
+
+    // Session dashboard state
+    this.sessionDashboardOpen = false;
+    this.sessionRefreshInterval = null;
+
+    // Cron dashboard state
+    this.cronDashboardOpen = false;
+    this.cronRefreshInterval = null;
+    this.currentEditJobId = null;
 
     // Models list (fetched on connect)
     this.availableModels = [];
@@ -2484,6 +2634,11 @@ window.CLAWGPT_CONFIG = {
     this.elements.authToken.value = this.authToken;
     this.elements.sessionKeyInput.value = this.sessionKey;
     this.elements.darkMode.checked = this.darkMode;
+    
+    // Set checkbox values
+    const desktopNotificationsEl = document.getElementById('desktopNotifications');
+    if (desktopNotificationsEl) desktopNotificationsEl.checked = this.desktopNotifications;
+    
     this.applyTheme();
 
     // Event listeners
@@ -2508,8 +2663,72 @@ window.CLAWGPT_CONFIG = {
     });
     this.elements.messageInput.addEventListener('input', () => this.onInputChange());
 
+    // Drag and drop workspace files into message input
+    const inputContainer = document.querySelector('.input-container');
+    if (inputContainer) {
+      inputContainer.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        inputContainer.classList.add('drag-over');
+      });
+
+      inputContainer.addEventListener('dragleave', (e) => {
+        if (e.target === inputContainer) {
+          inputContainer.classList.remove('drag-over');
+        }
+      });
+
+      inputContainer.addEventListener('drop', (e) => {
+        e.preventDefault();
+        inputContainer.classList.remove('drag-over');
+
+        const data = e.dataTransfer.getData('text/plain');
+        if (data && data.startsWith('File: ')) {
+          const filePath = data.substring(6);
+          const currentText = this.elements.messageInput.value;
+          const mention = `[Workspace file: ${filePath}]`;
+          this.elements.messageInput.value = currentText + (currentText ? '\n\n' : '') + mention;
+          this.elements.messageInput.focus();
+          this.onInputChange();
+        }
+      });
+    }
+
     this.elements.newChatBtn.addEventListener('click', () => this.newChat());
     this.elements.stopBtn.addEventListener('click', () => this.stopGeneration());
+    
+    // Scroll to bottom button
+    this.elements.scrollToBottomBtn.addEventListener('click', () => {
+      this.elements.messages.scrollTop = this.elements.messages.scrollHeight;
+    });
+    
+    // Show/hide scroll to bottom button based on scroll position
+    this.elements.messages.addEventListener('scroll', () => {
+      const messagesEl = this.elements.messages;
+      const isNearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 100;
+      this.elements.scrollToBottomBtn.style.display = isNearBottom ? 'none' : 'flex';
+    });
+
+    // Spacebar to scroll to bottom (only when not typing in input fields)
+    document.addEventListener('keydown', (e) => {
+      // Only trigger if spacebar pressed
+      if (e.key !== ' ' && e.code !== 'Space') return;
+      
+      // Don't trigger if typing in input/textarea/contenteditable
+      const target = e.target;
+      if (target.tagName === 'INPUT' || 
+          target.tagName === 'TEXTAREA' || 
+          target.isContentEditable) {
+        return;
+      }
+      
+      // Don't trigger if any modifier keys pressed
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+      
+      // Force scroll to bottom
+      e.preventDefault(); // Prevent page scroll
+      this.elements.messages.scrollTop = this.elements.messages.scrollHeight;
+    });
 
     // Voice input button
     this.initVoiceInput();
@@ -2517,12 +2736,58 @@ window.CLAWGPT_CONFIG = {
     // Text-to-speech
     this.initSpeechSynthesis();
 
+    // Talk Mode
+    this.initTalkMode();
+
     // Image upload
     this.initImageUpload();
 
     this.elements.settingsBtn.addEventListener('click', () => this.openSettings());
     this.elements.closeSettings.addEventListener('click', () => this.closeSettings());
     this.elements.connectBtn.addEventListener('click', () => this.connect());
+
+    // Session dashboard
+    if (this.elements.sessionsBtn) {
+      this.elements.sessionsBtn.addEventListener('click', () => this.toggleSessionDashboard());
+    }
+    if (this.elements.sessionDashboardClose) {
+      this.elements.sessionDashboardClose.addEventListener('click', () => this.closeSessionDashboard());
+    }
+
+    // Cron dashboard
+    if (this.elements.cronBtn) {
+      this.elements.cronBtn.addEventListener('click', () => this.toggleCronDashboard());
+    }
+    if (this.elements.cronDashboardClose) {
+      this.elements.cronDashboardClose.addEventListener('click', () => this.closeCronDashboard());
+    }
+    if (this.elements.cronCreateBtn) {
+      this.elements.cronCreateBtn.addEventListener('click', () => this.openCronModal());
+    }
+    if (this.elements.cronModalClose) {
+      this.elements.cronModalClose.addEventListener('click', () => this.closeCronModal());
+    }
+    if (this.elements.cronFormCancel) {
+      this.elements.cronFormCancel.addEventListener('click', () => this.closeCronModal());
+    }
+    if (this.elements.cronForm) {
+      this.elements.cronForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this.saveCronJob();
+      });
+    }
+
+    // Cron form schedule type selector
+    const cronScheduleType = document.getElementById('cronScheduleType');
+    if (cronScheduleType) {
+      cronScheduleType.addEventListener('change', () => this.updateCronScheduleFields());
+    }
+
+    // Cron form payload type selector
+    const cronPayloadType = document.getElementById('cronPayloadType');
+    if (cronPayloadType) {
+      cronPayloadType.addEventListener('change', () => this.updateCronPayloadFields());
+    }
 
     // Help/shortcuts modal
     if (this.elements.helpBtn) {
@@ -2632,6 +2897,17 @@ window.CLAWGPT_CONFIG = {
       scanQrBtn.addEventListener('click', () => this.scanQRCode());
     }
 
+    // Voice / Talk Mode settings
+    const ttsProviderEl = document.getElementById('ttsProvider');
+    if (ttsProviderEl) {
+      ttsProviderEl.addEventListener('change', () => this.toggleElevenLabsSettings());
+    }
+
+    const refreshVoicesBtn = document.getElementById('refreshVoicesBtn');
+    if (refreshVoicesBtn) {
+      refreshVoicesBtn.addEventListener('click', () => this.fetchElevenLabsVoices());
+    }
+
     // Manual setup toggle (mobile)
     const advancedSetupToggle = document.getElementById('advancedSetupToggle');
     const advancedSetupFields = document.getElementById('advancedSetupFields');
@@ -2712,6 +2988,44 @@ window.CLAWGPT_CONFIG = {
     }
 
     this.elements.menuBtn.addEventListener('click', () => this.toggleSidebar());
+
+    // Right panel (Intelligence + Artifacts + Workspace)
+    this.elements.intelligenceBtn.addEventListener('click', () => this.openRightPanel('intelligence'));
+    this.elements.artifactsBtn.addEventListener('click', () => this.openRightPanel('artifacts'));
+    this.elements.workspaceBtn.addEventListener('click', () => this.openRightPanel('workspace'));
+    this.elements.rightPanelCloseBtn.addEventListener('click', () => this.closeRightPanel());
+    this.elements.intelligenceTab.addEventListener('click', () => this.switchRightPanelTab('intelligence'));
+    this.elements.artifactsTab.addEventListener('click', () => this.switchRightPanelTab('artifacts'));
+    this.elements.workspaceTab.addEventListener('click', () => this.switchRightPanelTab('workspace'));
+
+    // Intelligence panel
+    this.elements.intelligenceGenerateBtn.addEventListener('click', () => this.runIntelligenceExtraction());
+    this.elements.intelligenceDownloadAllBtn.addEventListener('click', () => this.downloadAllIntelligence());
+    this.elements.intelligencePromptViewBtn.addEventListener('click', () => this.togglePromptEditor());
+    this.elements.intelligencePromptSaveBtn.addEventListener('click', () => this.saveCustomPrompt());
+    this.elements.intelligencePromptCancelBtn.addEventListener('click', () => this.hidePromptEditor());
+    this.elements.intelligencePromptSelect.addEventListener('change', (e) => this.onPromptSelected(e));
+    this.elements.intelligenceVersionSelect.addEventListener('change', (e) => this.onVersionSelected(e));
+    this.initRightPanelResize();
+    this.loadIntelligencePrompts();
+
+    // Workspace panel
+    this.elements.workspaceRefreshBtn.addEventListener('click', () => this.loadWorkspaceFiles());
+    this.elements.workspaceViewerCloseBtn.addEventListener('click', () => this.closeWorkspaceViewer());
+    this.elements.workspaceViewerEditBtn.addEventListener('click', () => this.openWorkspaceEditor());
+    this.elements.workspaceEditorSaveBtn.addEventListener('click', () => this.saveWorkspaceFile());
+    this.elements.workspaceEditorCancelBtn.addEventListener('click', () => this.cancelWorkspaceEdit());
+    this.elements.workspacePath.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        this.loadWorkspaceFiles();
+      }
+    });
+    this.currentWorkspaceFile = null;
+    this.workspaceFileTree = {};
+
+    // Load expanded folders state
+    const expandedDirs = localStorage.getItem('clawgpt-workspace-expanded');
+    this.workspaceExpandedDirs = expandedDirs ? new Set(JSON.parse(expandedDirs)) : new Set();
 
     // Sidebar overlay - close sidebar when clicking outside
     const sidebarOverlay = document.getElementById('sidebarOverlay');
@@ -2816,6 +3130,34 @@ window.CLAWGPT_CONFIG = {
     this.elements.renameModal.addEventListener('click', (e) => {
       if (e.target === this.elements.renameModal) {
         this.closeRenameModal();
+      }
+    });
+
+    // Context menu event listeners
+    this.contextMenuChatId = null;
+    this.elements.chatContextMenu.addEventListener('click', (e) => {
+      const item = e.target.closest('.chat-context-menu-item');
+      if (!item || !this.contextMenuChatId) return;
+      
+      const action = item.dataset.action;
+      const chatId = this.contextMenuChatId; // Save ID before hiding menu
+      this.hideContextMenu();
+      
+      if (action === 'rename') {
+        this.renameChat(chatId);
+      } else if (action === 'regenerate-title') {
+        this.generateAITitle(chatId);
+      } else if (action === 'pin') {
+        this.togglePin(chatId);
+      } else if (action === 'delete') {
+        this.deleteChat(chatId);
+      }
+    });
+
+    // Hide context menu when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!this.elements.chatContextMenu.contains(e.target)) {
+        this.hideContextMenu();
       }
     });
 
@@ -2990,6 +3332,7 @@ window.CLAWGPT_CONFIG = {
     this.updateSettingsForConfigMode();
     this.updateFileMemoryUI();
     this.updateLogCount();
+    this.updateVoiceSettings();
   }
 
   updateLogCount() {
@@ -3004,6 +3347,81 @@ window.CLAWGPT_CONFIG = {
         logCountEl.textContent = `Logs: ${logCount} entries`;
         logCountEl.style.color = '';
       }
+    }
+  }
+
+  updateVoiceSettings() {
+    // Populate voice settings UI
+    const ttsProviderEl = document.getElementById('ttsProvider');
+    if (ttsProviderEl) {
+      ttsProviderEl.value = this.ttsProvider;
+      this.toggleElevenLabsSettings();
+    }
+
+    const elevenlabsApiKeyEl = document.getElementById('elevenlabsApiKey');
+    if (elevenlabsApiKeyEl) elevenlabsApiKeyEl.value = this.elevenlabsApiKey;
+
+    const elevenlabsVoiceEl = document.getElementById('elevenlabsVoice');
+    if (elevenlabsVoiceEl) elevenlabsVoiceEl.value = this.elevenlabsVoiceId;
+
+    const elevenlabsModelEl = document.getElementById('elevenlabsModel');
+    if (elevenlabsModelEl) elevenlabsModelEl.value = this.elevenlabsModel;
+
+    const streamingTtsEl = document.getElementById('streamingTts');
+    if (streamingTtsEl) streamingTtsEl.checked = this.streamingTts;
+
+    const autoListenEl = document.getElementById('autoListenAfterResponse');
+    if (autoListenEl) autoListenEl.checked = this.autoListenAfterResponse;
+  }
+
+  toggleElevenLabsSettings() {
+    const ttsProviderEl = document.getElementById('ttsProvider');
+    const elevenlabsSettingsEl = document.getElementById('elevenlabsSettings');
+    if (elevenlabsSettingsEl && ttsProviderEl) {
+      elevenlabsSettingsEl.style.display = ttsProviderEl.value === 'elevenlabs' ? 'block' : 'none';
+    }
+  }
+
+  async fetchElevenLabsVoices() {
+    const apiKey = document.getElementById('elevenlabsApiKey')?.value;
+    if (!apiKey) {
+      this.showToast('Enter an API key first', true);
+      return;
+    }
+
+    const btn = document.getElementById('refreshVoicesBtn');
+    if (btn) btn.disabled = true;
+
+    try {
+      const response = await fetch('https://api.elevenlabs.io/v1/voices', {
+        headers: { 'xi-api-key': apiKey }
+      });
+
+      if (!response.ok) {
+        throw new Error(response.status === 401 ? 'Invalid API key' : `Error ${response.status}`);
+      }
+
+      const data = await response.json();
+      const select = document.getElementById('elevenlabsVoice');
+      if (select && data.voices) {
+        const currentValue = select.value;
+        select.innerHTML = '';
+        data.voices.forEach(voice => {
+          const option = document.createElement('option');
+          option.value = voice.voice_id;
+          option.textContent = voice.name;
+          select.appendChild(option);
+        });
+        // Restore selection if it exists
+        if (currentValue && select.querySelector(`option[value="${currentValue}"]`)) {
+          select.value = currentValue;
+        }
+        this.showToast(`Loaded ${data.voices.length} voices`);
+      }
+    } catch (error) {
+      this.showToast('Failed to load voices: ' + error.message, true);
+    } finally {
+      if (btn) btn.disabled = false;
     }
   }
 
@@ -3061,6 +3479,591 @@ window.CLAWGPT_CONFIG = {
     }
   }
 
+  // Session Dashboard methods
+  async toggleSessionDashboard() {
+    if (this.sessionDashboardOpen) {
+      this.closeSessionDashboard();
+    } else {
+      this.openSessionDashboard();
+    }
+  }
+
+  async openSessionDashboard() {
+    this.sessionDashboardOpen = true;
+    if (this.elements.sessionDashboard) {
+      this.elements.sessionDashboard.style.display = 'flex';
+    }
+    await this.loadSessionList();
+
+    // Start auto-refresh every 30 seconds
+    if (this.sessionRefreshInterval) {
+      clearInterval(this.sessionRefreshInterval);
+    }
+    this.sessionRefreshInterval = setInterval(() => {
+      if (this.sessionDashboardOpen) {
+        this.loadSessionList();
+      }
+    }, 30000);
+  }
+
+  closeSessionDashboard() {
+    this.sessionDashboardOpen = false;
+    if (this.elements.sessionDashboard) {
+      this.elements.sessionDashboard.style.display = 'none';
+    }
+
+    // Stop auto-refresh
+    if (this.sessionRefreshInterval) {
+      clearInterval(this.sessionRefreshInterval);
+      this.sessionRefreshInterval = null;
+    }
+  }
+
+  async loadSessionList() {
+    if (!this.elements.sessionDashboardBody) return;
+
+    try {
+      // Show loading state
+      this.elements.sessionDashboardBody.innerHTML = '<div class="session-loading">Loading sessions...</div>';
+
+      // Request session list from gateway
+      const result = await this.request('sessions.list', {});
+
+      if (!result.sessions || result.sessions.length === 0) {
+        this.elements.sessionDashboardBody.innerHTML = '<div class="session-empty">No sessions found</div>';
+        return;
+      }
+
+      // Render session cards
+      this.renderSessionCards(result.sessions);
+    } catch (error) {
+      console.error('Failed to load sessions:', error);
+      this.elements.sessionDashboardBody.innerHTML = '<div class="session-error">Failed to load sessions</div>';
+    }
+  }
+
+  renderSessionCards(sessions) {
+    if (!this.elements.sessionDashboardBody) return;
+
+    const html = sessions.map(session => {
+      const isActive = session.key === this.sessionKey;
+      const statusClass = session.active ? 'active' : 'idle';
+      const lastMessage = session.lastMessage || 'No messages';
+      const preview = this.truncateText(lastMessage, 80);
+      const tokens = session.tokens ? `${session.tokens.toLocaleString()} tokens` : '';
+
+      return `
+        <div class="session-card ${isActive ? 'active' : ''}" data-session-key="${this.escapeHtml(session.key)}">
+          <div class="session-card-header">
+            <div class="session-card-name">
+              <span class="session-status-indicator ${statusClass}"></span>
+              ${this.escapeHtml(session.key)}
+            </div>
+            <div class="session-card-model">${this.escapeHtml(session.model || 'unknown')}</div>
+          </div>
+          <div class="session-card-body">
+            <div class="session-card-preview">${this.escapeHtml(preview)}</div>
+          </div>
+          <div class="session-card-footer">
+            <div class="session-card-tokens">${tokens}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    this.elements.sessionDashboardBody.innerHTML = html;
+
+    // Add click handlers for session cards
+    this.elements.sessionDashboardBody.querySelectorAll('.session-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const sessionKey = card.dataset.sessionKey;
+        this.switchSession(sessionKey);
+      });
+    });
+  }
+
+  async switchSession(sessionKey) {
+    if (sessionKey === this.sessionKey) {
+      // Already on this session, just close dashboard
+      this.closeSessionDashboard();
+      return;
+    }
+
+    try {
+      // Update session key
+      this.sessionKey = sessionKey;
+
+      // Save to settings
+      this.saveSettings();
+
+      // Update UI
+      if (this.elements.sessionKeyInput) {
+        this.elements.sessionKeyInput.value = sessionKey;
+      }
+
+      // Clear current chat
+      this.currentChatId = null;
+      this.lastGatewayChat = null;
+
+      // Create a new chat for this session
+      this.newChat();
+
+      // Close dashboard
+      this.closeSessionDashboard();
+
+      // Load history for new session
+      await this.loadHistory();
+
+      console.log('Switched to session:', sessionKey);
+    } catch (error) {
+      console.error('Failed to switch session:', error);
+      this.showToast('Failed to switch session', 'error');
+    }
+  }
+
+  truncateText(text, maxLength) {
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
+  }
+
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // Cron Dashboard methods
+  async toggleCronDashboard() {
+    if (this.cronDashboardOpen) {
+      this.closeCronDashboard();
+    } else {
+      this.openCronDashboard();
+    }
+  }
+
+  async openCronDashboard() {
+    this.cronDashboardOpen = true;
+    if (this.elements.cronDashboard) {
+      this.elements.cronDashboard.style.display = 'flex';
+    }
+    await this.loadCronJobs();
+
+    // Start auto-refresh every 30 seconds
+    if (this.cronRefreshInterval) {
+      clearInterval(this.cronRefreshInterval);
+    }
+    this.cronRefreshInterval = setInterval(() => {
+      if (this.cronDashboardOpen) {
+        this.loadCronJobs();
+      }
+    }, 30000);
+  }
+
+  closeCronDashboard() {
+    this.cronDashboardOpen = false;
+    if (this.elements.cronDashboard) {
+      this.elements.cronDashboard.style.display = 'none';
+    }
+
+    // Stop auto-refresh
+    if (this.cronRefreshInterval) {
+      clearInterval(this.cronRefreshInterval);
+      this.cronRefreshInterval = null;
+    }
+  }
+
+  async loadCronJobs() {
+    if (!this.elements.cronDashboardBody) return;
+
+    try {
+      // Show loading state
+      this.elements.cronDashboardBody.innerHTML = '<div class="cron-loading">Loading cron jobs...</div>';
+
+      // Request cron jobs from gateway
+      const result = await this.request('cron.list', {});
+
+      if (!result.jobs || result.jobs.length === 0) {
+        this.elements.cronDashboardBody.innerHTML = '<div class="cron-empty">No cron jobs configured</div>';
+        return;
+      }
+
+      // Render cron job cards
+      this.renderCronCards(result.jobs);
+    } catch (error) {
+      console.error('Failed to load cron jobs:', error);
+      this.elements.cronDashboardBody.innerHTML = '<div class="cron-error">Failed to load cron jobs</div>';
+    }
+  }
+
+  renderCronCards(jobs) {
+    if (!this.elements.cronDashboardBody) return;
+
+    const html = jobs.map(job => {
+      const enabledClass = job.enabled ? 'enabled' : 'disabled';
+      const scheduleText = this.formatSchedule(job.schedule);
+      const nextRunText = job.nextRun ? new Date(job.nextRun).toLocaleString() : 'N/A';
+      const lastRunStatus = job.lastRunStatus || 'never';
+      const statusClass = lastRunStatus === 'success' ? 'success' : lastRunStatus === 'error' ? 'error' : 'idle';
+
+      return `
+        <div class="cron-card ${enabledClass}" data-job-id="${this.escapeHtml(job.id)}">
+          <div class="cron-card-header">
+            <div class="cron-card-name">
+              <span class="cron-status-indicator ${statusClass}"></span>
+              ${this.escapeHtml(job.name)}
+            </div>
+            <div class="cron-card-actions">
+              <label class="cron-toggle" onclick="event.stopPropagation()">
+                <input type="checkbox" ${job.enabled ? 'checked' : ''}
+                  onchange="window.app.toggleCronJob('${this.escapeHtml(job.id)}', this.checked)">
+                <span class="cron-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="cron-card-body">
+            <div class="cron-card-schedule">
+              <strong>Schedule:</strong> ${this.escapeHtml(scheduleText)}
+            </div>
+            <div class="cron-card-next-run">
+              <strong>Next run:</strong> ${this.escapeHtml(nextRunText)}
+            </div>
+            <div class="cron-card-last-run">
+              <strong>Last run:</strong> <span class="status-${statusClass}">${this.escapeHtml(lastRunStatus)}</span>
+            </div>
+          </div>
+          <div class="cron-card-footer">
+            <button class="cron-btn-run" onclick="event.stopPropagation(); window.app.runCronJob('${this.escapeHtml(job.id)}')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              </svg>
+              Run Now
+            </button>
+            <button class="cron-btn-edit" onclick="event.stopPropagation(); window.app.editCronJob('${this.escapeHtml(job.id)}')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+              </svg>
+              Edit
+            </button>
+            <button class="cron-btn-delete" onclick="event.stopPropagation(); window.app.deleteCronJob('${this.escapeHtml(job.id)}')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+              Delete
+            </button>
+            <button class="cron-btn-history" onclick="event.stopPropagation(); window.app.toggleCronHistory('${this.escapeHtml(job.id)}')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+              </svg>
+              History
+            </button>
+          </div>
+          <div class="cron-history" id="cronHistory-${this.escapeHtml(job.id)}" style="display: none;">
+            <div class="cron-history-loading">Loading history...</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    this.elements.cronDashboardBody.innerHTML = html;
+  }
+
+  formatSchedule(schedule) {
+    if (!schedule) return 'Unknown';
+
+    if (schedule.kind === 'cron') {
+      return `Cron: ${schedule.expr} (${schedule.tz || 'UTC'})`;
+    } else if (schedule.kind === 'every') {
+      const ms = schedule.everyMs;
+      if (ms < 60000) return `Every ${ms}ms`;
+      if (ms < 3600000) return `Every ${Math.floor(ms / 60000)} minutes`;
+      if (ms < 86400000) return `Every ${Math.floor(ms / 3600000)} hours`;
+      return `Every ${Math.floor(ms / 86400000)} days`;
+    } else if (schedule.kind === 'at') {
+      return `One-shot: ${new Date(schedule.at).toLocaleString()}`;
+    }
+
+    return 'Unknown';
+  }
+
+  async toggleCronJob(jobId, enabled) {
+    try {
+      await this.request('cron.update', {
+        jobId,
+        patch: { enabled }
+      });
+      this.showToast(`Job ${enabled ? 'enabled' : 'disabled'}`);
+      await this.loadCronJobs();
+    } catch (error) {
+      console.error('Failed to toggle cron job:', error);
+      this.showToast('Failed to toggle job', 'error');
+    }
+  }
+
+  async runCronJob(jobId) {
+    try {
+      await this.request('cron.run', { jobId });
+      this.showToast('Job triggered');
+      await this.loadCronJobs();
+    } catch (error) {
+      console.error('Failed to run cron job:', error);
+      this.showToast('Failed to run job', 'error');
+    }
+  }
+
+  async editCronJob(jobId) {
+    try {
+      const result = await this.request('cron.list', {});
+      const job = result.jobs?.find(j => j.id === jobId);
+
+      if (!job) {
+        this.showToast('Job not found', 'error');
+        return;
+      }
+
+      this.currentEditJobId = jobId;
+      this.openCronModal(job);
+    } catch (error) {
+      console.error('Failed to load cron job for editing:', error);
+      this.showToast('Failed to load job', 'error');
+    }
+  }
+
+  async deleteCronJob(jobId) {
+    if (!confirm('Are you sure you want to delete this cron job?')) {
+      return;
+    }
+
+    try {
+      await this.request('cron.remove', { jobId });
+      this.showToast('Job deleted');
+      await this.loadCronJobs();
+    } catch (error) {
+      console.error('Failed to delete cron job:', error);
+      this.showToast('Failed to delete job', 'error');
+    }
+  }
+
+  async toggleCronHistory(jobId) {
+    const historyEl = document.getElementById(`cronHistory-${jobId}`);
+    if (!historyEl) return;
+
+    if (historyEl.style.display === 'none') {
+      // Show and load history
+      historyEl.style.display = 'block';
+      historyEl.innerHTML = '<div class="cron-history-loading">Loading history...</div>';
+
+      try {
+        const result = await this.request('cron.runs', { jobId });
+        this.renderCronHistory(jobId, result.runs || []);
+      } catch (error) {
+        console.error('Failed to load cron history:', error);
+        historyEl.innerHTML = '<div class="cron-history-error">Failed to load history</div>';
+      }
+    } else {
+      // Hide history
+      historyEl.style.display = 'none';
+    }
+  }
+
+  renderCronHistory(jobId, runs) {
+    const historyEl = document.getElementById(`cronHistory-${jobId}`);
+    if (!historyEl) return;
+
+    if (runs.length === 0) {
+      historyEl.innerHTML = '<div class="cron-history-empty">No run history</div>';
+      return;
+    }
+
+    const html = `
+      <div class="cron-history-list">
+        ${runs.slice(0, 10).map(run => {
+          const statusClass = run.status === 'success' ? 'success' : 'error';
+          const timestamp = new Date(run.timestamp).toLocaleString();
+          return `
+            <div class="cron-history-item ${statusClass}">
+              <span class="cron-history-time">${this.escapeHtml(timestamp)}</span>
+              <span class="cron-history-status status-${statusClass}">${this.escapeHtml(run.status)}</span>
+              ${run.error ? `<div class="cron-history-error">${this.escapeHtml(run.error)}</div>` : ''}
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+
+    historyEl.innerHTML = html;
+  }
+
+  openCronModal(job = null) {
+    if (!this.elements.cronModal) return;
+
+    // Reset form
+    this.currentEditJobId = job ? job.id : null;
+
+    if (this.elements.cronModalTitle) {
+      this.elements.cronModalTitle.textContent = job ? 'Edit Cron Job' : 'Create Cron Job';
+    }
+
+    // Populate form with job data if editing
+    if (job) {
+      document.getElementById('cronJobName').value = job.name || '';
+
+      // Schedule
+      if (job.schedule?.kind === 'cron') {
+        document.getElementById('cronScheduleType').value = 'cron';
+        document.getElementById('cronExpr').value = job.schedule.expr || '';
+        document.getElementById('cronTimezone').value = job.schedule.tz || 'UTC';
+      } else if (job.schedule?.kind === 'every') {
+        document.getElementById('cronScheduleType').value = 'every';
+        document.getElementById('cronInterval').value = job.schedule.everyMs || '';
+      } else if (job.schedule?.kind === 'at') {
+        document.getElementById('cronScheduleType').value = 'at';
+        // Convert ISO to datetime-local format
+        const date = new Date(job.schedule.at);
+        const localDateTime = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+        document.getElementById('cronAt').value = localDateTime;
+      }
+
+      // Payload
+      if (job.payload?.kind === 'systemEvent') {
+        document.getElementById('cronPayloadType').value = 'systemEvent';
+        document.getElementById('cronMessage').value = job.payload.text || '';
+      } else if (job.payload?.kind === 'agentTurn') {
+        document.getElementById('cronPayloadType').value = 'agentTurn';
+        document.getElementById('cronMessage').value = job.payload.message || '';
+      }
+
+      document.getElementById('cronSessionTarget').value = job.sessionTarget || 'main';
+      document.getElementById('cronEnabled').checked = job.enabled !== false;
+    } else {
+      // Reset to defaults
+      document.getElementById('cronJobName').value = '';
+      document.getElementById('cronScheduleType').value = 'cron';
+      document.getElementById('cronExpr').value = '';
+      document.getElementById('cronTimezone').value = 'UTC';
+      document.getElementById('cronInterval').value = '';
+      document.getElementById('cronAt').value = '';
+      document.getElementById('cronPayloadType').value = 'systemEvent';
+      document.getElementById('cronMessage').value = '';
+      document.getElementById('cronSessionTarget').value = 'main';
+      document.getElementById('cronEnabled').checked = true;
+    }
+
+    this.updateCronScheduleFields();
+    this.updateCronPayloadFields();
+
+    this.elements.cronModal.style.display = 'flex';
+  }
+
+  closeCronModal() {
+    if (this.elements.cronModal) {
+      this.elements.cronModal.style.display = 'none';
+    }
+    this.currentEditJobId = null;
+  }
+
+  updateCronScheduleFields() {
+    const scheduleType = document.getElementById('cronScheduleType').value;
+
+    document.getElementById('cronExprGroup').style.display = scheduleType === 'cron' ? 'block' : 'none';
+    document.getElementById('cronTimezoneGroup').style.display = scheduleType === 'cron' ? 'block' : 'none';
+    document.getElementById('cronIntervalGroup').style.display = scheduleType === 'every' ? 'block' : 'none';
+    document.getElementById('cronAtGroup').style.display = scheduleType === 'at' ? 'block' : 'none';
+  }
+
+  updateCronPayloadFields() {
+    const payloadType = document.getElementById('cronPayloadType').value;
+    const messageLabel = document.getElementById('cronMessageLabel');
+
+    if (messageLabel) {
+      messageLabel.textContent = payloadType === 'systemEvent' ? 'Event Text' : 'Message';
+    }
+  }
+
+  async saveCronJob() {
+    try {
+      const name = document.getElementById('cronJobName').value;
+      const scheduleType = document.getElementById('cronScheduleType').value;
+      const payloadType = document.getElementById('cronPayloadType').value;
+      const sessionTarget = document.getElementById('cronSessionTarget').value;
+      const enabled = document.getElementById('cronEnabled').checked;
+
+      // Build schedule object
+      let schedule;
+      if (scheduleType === 'cron') {
+        schedule = {
+          kind: 'cron',
+          expr: document.getElementById('cronExpr').value,
+          tz: document.getElementById('cronTimezone').value || 'UTC'
+        };
+      } else if (scheduleType === 'every') {
+        schedule = {
+          kind: 'every',
+          everyMs: parseInt(document.getElementById('cronInterval').value)
+        };
+      } else if (scheduleType === 'at') {
+        // Convert datetime-local to ISO 8601
+        const localDateTime = document.getElementById('cronAt').value;
+        const date = new Date(localDateTime);
+        schedule = {
+          kind: 'at',
+          at: date.toISOString()
+        };
+      }
+
+      // Build payload object
+      let payload;
+      const message = document.getElementById('cronMessage').value;
+      if (payloadType === 'systemEvent') {
+        payload = {
+          kind: 'systemEvent',
+          text: message
+        };
+      } else if (payloadType === 'agentTurn') {
+        payload = {
+          kind: 'agentTurn',
+          message: message
+        };
+      }
+
+      // Create or update job
+      if (this.currentEditJobId) {
+        // Update existing job
+        await this.request('cron.update', {
+          jobId: this.currentEditJobId,
+          patch: {
+            name,
+            schedule,
+            payload,
+            sessionTarget,
+            enabled
+          }
+        });
+        this.showToast('Job updated');
+      } else {
+        // Create new job
+        await this.request('cron.add', {
+          job: {
+            name,
+            schedule,
+            payload,
+            sessionTarget,
+            enabled
+          }
+        });
+        this.showToast('Job created');
+      }
+
+      this.closeCronModal();
+      await this.loadCronJobs();
+    } catch (error) {
+      console.error('Failed to save cron job:', error);
+      this.showToast('Failed to save job', 'error');
+    }
+  }
+
   saveAndCloseSettings() {
     // Save any changed settings from UI
     this.darkMode = this.elements.darkMode.checked;
@@ -3075,8 +4078,88 @@ window.CLAWGPT_CONFIG = {
       this.updateTokenDisplay();
     }
 
+    const desktopNotificationsEl = document.getElementById('desktopNotifications');
+    if (desktopNotificationsEl) {
+      const wasEnabled = this.desktopNotifications;
+      this.desktopNotifications = desktopNotificationsEl.checked;
+
+      // Request permission if enabling for the first time
+      if (this.desktopNotifications && !wasEnabled) {
+        this.requestNotificationPermission();
+      }
+    }
+
+    // Voice / Talk Mode settings
+    const ttsProviderEl = document.getElementById('ttsProvider');
+    if (ttsProviderEl) this.ttsProvider = ttsProviderEl.value;
+
+    const elevenlabsApiKeyEl = document.getElementById('elevenlabsApiKey');
+    if (elevenlabsApiKeyEl) this.elevenlabsApiKey = elevenlabsApiKeyEl.value;
+
+    const elevenlabsVoiceEl = document.getElementById('elevenlabsVoice');
+    if (elevenlabsVoiceEl) this.elevenlabsVoiceId = elevenlabsVoiceEl.value;
+
+    const elevenlabsModelEl = document.getElementById('elevenlabsModel');
+    if (elevenlabsModelEl) this.elevenlabsModel = elevenlabsModelEl.value;
+
+    const streamingTtsEl = document.getElementById('streamingTts');
+    if (streamingTtsEl) this.streamingTts = streamingTtsEl.checked;
+
+    const autoListenEl = document.getElementById('autoListenAfterResponse');
+    if (autoListenEl) this.autoListenAfterResponse = autoListenEl.checked;
+
     this.saveSettings();
     this.closeSettings();
+  }
+
+  async requestNotificationPermission() {
+    if (!('Notification' in window)) {
+      console.log('Browser does not support notifications');
+      return false;
+    }
+
+    if (Notification.permission === 'granted') {
+      return true;
+    }
+
+    if (Notification.permission !== 'denied') {
+      const permission = await Notification.requestPermission();
+      return permission === 'granted';
+    }
+
+    return false;
+  }
+
+  showNotification(title, body) {
+    // Only show if enabled and browser supports it
+    if (!this.desktopNotifications || !('Notification' in window)) {
+      return;
+    }
+
+    // Only show if tab is not visible (don't notify when user is actively viewing)
+    if (document.visibilityState === 'visible') {
+      return;
+    }
+
+    // Check permission
+    if (Notification.permission === 'granted') {
+      const notification = new Notification(title, {
+        body: body,
+        icon: '/favicon.ico',
+        badge: '/favicon.ico',
+        tag: 'clawgpt-message', // Replace previous notification
+        requireInteraction: false
+      });
+
+      // Focus window when notification is clicked
+      notification.onclick = () => {
+        window.focus();
+        notification.close();
+      };
+
+      // Auto-close after 5 seconds
+      setTimeout(() => notification.close(), 5000);
+    }
   }
 
   updateSettingsButtons() {
@@ -4039,6 +5122,78 @@ Example: [0, 2, 5]`;
     return '';
   }
 
+  extractFileAttachments(message) {
+    if (!message) return null;
+
+    const attachments = [];
+
+    // Check for filePath field (single file)
+    if (message.filePath) {
+      attachments.push({
+        path: message.filePath,
+        name: message.filePath.split('/').pop(),
+        type: this.detectFileType(message.filePath)
+      });
+    }
+
+    // Check for media field (can be array or single object)
+    if (message.media) {
+      const mediaArray = Array.isArray(message.media) ? message.media : [message.media];
+      mediaArray.forEach(media => {
+        if (media.path || media.filePath || media.url) {
+          const path = media.path || media.filePath || media.url;
+          attachments.push({
+            path: path,
+            name: media.name || path.split('/').pop(),
+            type: media.type || this.detectFileType(path),
+            size: media.size,
+            mimeType: media.mimeType || media.mime_type
+          });
+        }
+      });
+    }
+
+    // Also check content array for file references (MEDIA: format)
+    if (Array.isArray(message.content)) {
+      message.content.forEach(item => {
+        if (item.type === 'text' && item.text) {
+          // Look for MEDIA:/path/to/file pattern
+          const mediaMatches = item.text.match(/MEDIA:([^\s\n]+)/g);
+          if (mediaMatches) {
+            mediaMatches.forEach(match => {
+              const path = match.replace('MEDIA:', '');
+              attachments.push({
+                path: path,
+                name: path.split('/').pop(),
+                type: this.detectFileType(path)
+              });
+            });
+          }
+        }
+      });
+    }
+
+    return attachments.length > 0 ? attachments : null;
+  }
+
+  detectFileType(filename) {
+    const ext = filename.split('.').pop()?.toLowerCase();
+    if (!ext) return 'file';
+
+    const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico'];
+    const audioExts = ['mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac', 'opus'];
+    const videoExts = ['mp4', 'webm', 'mov', 'avi', 'mkv'];
+    const archiveExts = ['zip', 'tar', 'gz', 'rar', '7z', 'bz2'];
+    const documentExts = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'];
+
+    if (imageExts.includes(ext)) return 'image';
+    if (audioExts.includes(ext)) return 'audio';
+    if (videoExts.includes(ext)) return 'video';
+    if (archiveExts.includes(ext)) return 'archive';
+    if (documentExts.includes(ext)) return 'document';
+    return 'file';
+  }
+
   generateTitle(messages) {
     const firstUserMsg = messages.find(m => m.role === 'user');
     if (firstUserMsg) {
@@ -4123,7 +5278,9 @@ Example: [0, 2, 5]`;
 
     this.currentChatId = chatId;
     this._visibleMessageCount = null; // Reset virtualization on chat switch
+    this.closeRightPanel();
     this.renderMessages();
+    this.scanExistingArtifacts();
     this.renderChatList();
     this.updateTokenDisplay(); // Also updates model display
     this.elements.sidebar.classList.remove('open');
@@ -4331,13 +5488,18 @@ Example: [0, 2, 5]`;
 
     this.elements.chatList.innerHTML = this.sanitize(html);
 
-    // Add click handlers
+    // Add click and context menu handlers
     this.elements.chatList.querySelectorAll('.chat-item').forEach(item => {
       const chatId = item.dataset.id;
 
       item.addEventListener('click', (e) => {
-        if (e.target.closest('.pin-btn') || e.target.closest('.delete-btn') || e.target.closest('.rename-btn')) return;
         this.selectChat(chatId);
+      });
+
+      // Right-click to show context menu
+      item.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        this.showContextMenu(chatId, e.clientX, e.clientY);
       });
 
       // Drag handlers for all items
@@ -4345,28 +5507,6 @@ Example: [0, 2, 5]`;
       item.addEventListener('dragover', (e) => this.handleDragOver(e, chatId));
       item.addEventListener('drop', (e) => this.handleDrop(e, chatId));
       item.addEventListener('dragend', (e) => this.handleDragEnd(e));
-    });
-
-    this.elements.chatList.querySelectorAll('.delete-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.deleteChat(btn.dataset.id);
-      });
-    });
-
-    this.elements.chatList.querySelectorAll('.pin-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.togglePin(btn.dataset.id);
-      });
-    });
-
-    this.elements.chatList.querySelectorAll('.rename-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        console.log('Rename btn clicked, dataset.id:', btn.dataset.id);
-        e.stopPropagation();
-        this.renameChat(btn.dataset.id);
-      });
     });
 
     const expandBtn = document.getElementById('expandPinnedBtn');
@@ -4380,15 +5520,10 @@ Example: [0, 2, 5]`;
 
   renderChatItem(id, chat, isPinned, isBranch = false) {
     const isActive = id === this.currentChatId;
-    const pinTitle = isPinned ? 'Unpin' : 'Pin';
     const hasSummary = chat.metadata?.summary;
     const pinIcon = `<svg class="pin-icon ${isPinned ? 'pinned' : ''}" viewBox="0 0 24 24" fill="${isPinned ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <line x1="12" y1="17" x2="12" y2="22"/>
       <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/>
-    </svg>`;
-    const editIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
     </svg>`;
     const branchIcon = `<svg class="branch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <line x1="6" y1="3" x2="6" y2="15"/>
@@ -4398,15 +5533,11 @@ Example: [0, 2, 5]`;
     </svg>`;
     const summaryIndicator = hasSummary ? `<span class="summary-indicator" title="${this.escapeHtml(chat.metadata.summary)}">✨</span>` : '';
     const branchIndicator = isBranch ? `<span class="branch-indicator">${branchIcon}</span>` : '';
+    const pinIndicator = isPinned ? `<span class="pin-indicator">${pinIcon}</span>` : '';
 
     return `
       <div class="chat-item ${isActive ? 'active' : ''} ${isPinned ? 'pinned' : ''} ${isBranch ? 'branch' : ''}" data-id="${id}" data-pinned="${isPinned}" draggable="true">
-        <span class="chat-title">${branchIndicator}${summaryIndicator}${this.escapeHtml(chat.title)}</span>
-        <div class="chat-actions">
-          <button class="rename-btn" data-id="${id}" title="Rename">${editIcon}</button>
-          <button class="pin-btn" data-id="${id}" title="${pinTitle}">${pinIcon}</button>
-          <button class="delete-btn" data-id="${id}" title="Delete">&times;</button>
-        </div>
+        <span class="chat-title" title="${this.escapeHtml(chat.title)}">${branchIndicator}${summaryIndicator}${pinIndicator}${this.escapeHtml(chat.title)}</span>
       </div>
     `;
   }
@@ -4457,8 +5588,43 @@ Example: [0, 2, 5]`;
     this.renamingChatId = null;
   }
 
+  showContextMenu(chatId, x, y) {
+    this.contextMenuChatId = chatId;
+    const menu = this.elements.chatContextMenu;
+    const chat = this.chats[chatId];
+    
+    // Update pin button text
+    const pinText = menu.querySelector('.pin-text');
+    if (pinText) {
+      pinText.textContent = chat?.pinned ? 'Unpin' : 'Pin';
+    }
+    
+    // Position the menu
+    menu.style.left = `${x}px`;
+    menu.style.top = `${y}px`;
+    menu.classList.add('visible');
+    
+    // Adjust position if menu goes off-screen
+    setTimeout(() => {
+      const rect = menu.getBoundingClientRect();
+      if (rect.right > window.innerWidth) {
+        menu.style.left = `${x - rect.width}px`;
+      }
+      if (rect.bottom > window.innerHeight) {
+        menu.style.top = `${y - rect.height}px`;
+      }
+    }, 0);
+  }
+
+  hideContextMenu() {
+    this.elements.chatContextMenu.classList.remove('visible');
+    this.contextMenuChatId = null;
+  }
+
   renderMessages() {
     const chat = this.currentChatId ? this.chats[this.currentChatId] : null;
+    this.updateIntelligenceButton();
+    this.updateArtifactsBadge();
 
     if (!chat || chat.messages.length === 0) {
       this.elements.welcome.style.display = 'flex';
@@ -4540,6 +5706,11 @@ Example: [0, 2, 5]`;
           }).join('')}</div>`
         : '';
 
+      // Render assistant attachments if present
+      const attachmentsHtml = msg.attachments && msg.attachments.length > 0
+        ? this.renderFileAttachments(msg.attachments)
+        : '';
+
       return `
         <div class="message ${msg.role}" data-idx="${originalIdx}">
           <div class="message-header">
@@ -4548,6 +5719,7 @@ Example: [0, 2, 5]`;
           </div>
           ${imagesHtml}
           ${textFilesHtml}
+          ${attachmentsHtml}
           <div class="message-content">${this.formatContent(msg.content)}</div>
           <div class="message-actions">
             <button class="msg-action-btn copy-btn" title="Copy">${copyIcon}</button>
@@ -4635,6 +5807,24 @@ Example: [0, 2, 5]`;
         const msgEl = e.target.closest('.message');
         const content = msgEl.querySelector('.message-content').textContent;
         this.toggleSpeech(btn, content);
+      });
+    });
+
+    // Attachment download buttons
+    this.elements.messages.querySelectorAll('.attachment-download-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const attachmentCard = e.target.closest('[data-attachment-idx]');
+        const msgEl = e.target.closest('.message');
+        const msgIdx = parseInt(msgEl.dataset.idx);
+        const attachmentIdx = parseInt(attachmentCard.dataset.attachmentIdx);
+        this.downloadAttachment(msgIdx, attachmentIdx);
+      });
+    });
+
+    // Clickable attachment images (lightbox)
+    this.elements.messages.querySelectorAll('.clickable-attachment-img').forEach(img => {
+      img.addEventListener('click', (e) => {
+        this.showImageLightbox(e.target.src, e.target.alt);
       });
     });
   }
@@ -5608,10 +6798,155 @@ Example: [0, 2, 5]`;
     return icons[ext] || '📄';
   }
 
+  getFileTypeIcon(type, filename) {
+    const ext = filename.split('.').pop()?.toLowerCase();
+
+    switch (type) {
+      case 'image':
+        return '🖼️';
+      case 'audio':
+        return '🎵';
+      case 'video':
+        return '🎬';
+      case 'archive':
+        return '📦';
+      case 'document':
+        return this.getFileIcon(ext);
+      default:
+        return this.getFileIcon(ext);
+    }
+  }
+
+  renderFileAttachments(attachments) {
+    if (!attachments || attachments.length === 0) return '';
+
+    const html = attachments.map((file, idx) => {
+      const icon = this.getFileTypeIcon(file.type, file.name);
+      const sizeText = file.size ? this.formatFileSize(file.size) : '';
+
+      // For images, render inline preview
+      if (file.type === 'image') {
+        return `<div class="attachment-image" data-attachment-idx="${idx}">
+          <img src="${this.escapeHtml(file.path)}" alt="${this.escapeHtml(file.name)}"
+               class="attachment-img clickable-attachment-img"
+               onerror="this.parentElement.innerHTML='<div class=\\'attachment-card\\'><div class=\\'attachment-icon\\'>${icon}</div><div class=\\'attachment-info\\'><div class=\\'attachment-name\\'>${this.escapeHtml(file.name)}</div>${sizeText ? `<div class=\\'attachment-size\\'>${sizeText}</div>` : ''}</div><button class=\\'attachment-download-btn\\' title=\\'Download\\'>⬇</button></div>'">
+        </div>`;
+      }
+
+      // For audio files, render audio player
+      if (file.type === 'audio') {
+        return `<div class="attachment-audio" data-attachment-idx="${idx}">
+          <div class="attachment-audio-header">
+            <span class="attachment-icon">${icon}</span>
+            <span class="attachment-name">${this.escapeHtml(file.name)}</span>
+            ${sizeText ? `<span class="attachment-size">${sizeText}</span>` : ''}
+          </div>
+          <audio controls class="attachment-audio-player">
+            <source src="${this.escapeHtml(file.path)}" type="${this.escapeHtml(file.mimeType || 'audio/mpeg')}">
+            Your browser does not support the audio element.
+          </audio>
+        </div>`;
+      }
+
+      // For all other files, render download card
+      return `<div class="attachment-card" data-attachment-idx="${idx}">
+        <div class="attachment-icon">${icon}</div>
+        <div class="attachment-info">
+          <div class="attachment-name">${this.escapeHtml(file.name)}</div>
+          ${sizeText ? `<div class="attachment-size">${sizeText}</div>` : ''}
+        </div>
+        <button class="attachment-download-btn" title="Download">⬇</button>
+      </div>`;
+    }).join('');
+
+    return `<div class="message-attachments">${html}</div>`;
+  }
+
   formatFileSize(bytes) {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  async downloadAttachment(msgIdx, attachmentIdx) {
+    const chat = this.chats[this.currentChatId];
+    if (!chat || !chat.messages[msgIdx]) return;
+
+    const msg = chat.messages[msgIdx];
+    if (!msg.attachments || !msg.attachments[attachmentIdx]) return;
+
+    const attachment = msg.attachments[attachmentIdx];
+
+    try {
+      // Try to fetch the file
+      const response = await fetch(attachment.path);
+      if (!response.ok) throw new Error('File not found');
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+
+      // Create temporary download link
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = attachment.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      // Clean up
+      setTimeout(() => URL.revokeObjectURL(url), 100);
+    } catch (err) {
+      console.error('Failed to download attachment:', err);
+      alert(`Failed to download ${attachment.name}. The file may not be accessible.`);
+    }
+  }
+
+  showImageLightbox(src, alt) {
+    // Create lightbox overlay if it doesn't exist
+    let lightbox = document.getElementById('imageLightbox');
+    if (!lightbox) {
+      lightbox = document.createElement('div');
+      lightbox.id = 'imageLightbox';
+      lightbox.className = 'image-lightbox';
+      lightbox.innerHTML = `
+        <div class="lightbox-overlay"></div>
+        <div class="lightbox-content">
+          <img class="lightbox-img" src="" alt="">
+          <button class="lightbox-close" title="Close">✕</button>
+        </div>
+      `;
+      document.body.appendChild(lightbox);
+
+      // Close on overlay click
+      lightbox.querySelector('.lightbox-overlay').addEventListener('click', () => {
+        this.closeLightbox();
+      });
+
+      // Close on close button click
+      lightbox.querySelector('.lightbox-close').addEventListener('click', () => {
+        this.closeLightbox();
+      });
+
+      // Close on Escape key
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && lightbox.classList.contains('active')) {
+          this.closeLightbox();
+        }
+      });
+    }
+
+    // Set image and show lightbox
+    const img = lightbox.querySelector('.lightbox-img');
+    img.src = src;
+    img.alt = alt;
+    lightbox.classList.add('active');
+  }
+
+  closeLightbox() {
+    const lightbox = document.getElementById('imageLightbox');
+    if (lightbox) {
+      lightbox.classList.remove('active');
+    }
   }
 
   fileToBase64(file) {
@@ -5836,7 +7171,13 @@ Example: [0, 2, 5]`;
   }
 
   scrollToBottom() {
-    this.elements.messages.scrollTop = this.elements.messages.scrollHeight;
+    // Only auto-scroll if user is already near the bottom (within 100px)
+    const messagesEl = this.elements.messages;
+    const isNearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 100;
+    
+    if (isNearBottom) {
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
   }
 
   async sendMessage(textOverride = null) {
@@ -5878,10 +7219,11 @@ Example: [0, 2, 5]`;
       this.currentChatId = this.generateId();
       this.chats[this.currentChatId] = {
         id: this.currentChatId,
-        title: (text || 'Image').slice(0, 30) + ((text || '').length > 30 ? '...' : ''),
+        title: 'New chat',
         messages: [],
         createdAt: Date.now(),
-        updatedAt: Date.now()
+        updatedAt: Date.now(),
+        needsAITitle: true // Flag to generate title after first response
       };
     }
 
@@ -5996,6 +7338,13 @@ Example: [0, 2, 5]`;
     this.streamBuffer = '';
     this.updateStreamingUI();
     this.renderMessages();
+    
+    // Double RAF ensures layout is complete before scroll
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        this.elements.messages.scrollTop = this.elements.messages.scrollHeight;
+      });
+    });
 
     try {
       // Check if we're switching to a different chat
@@ -6103,6 +7452,30 @@ Example: [0, 2, 5]`;
       return;
     }
 
+    // Handle title generation session responses
+    if (payload.sessionKey === '__clawgpt_title_gen') {
+      if ((state === 'final' || state === 'aborted') && content) {
+        this.handleTitleResponse(content);
+      }
+      return;
+    }
+
+    // Handle intelligence extraction session responses
+    if (payload.sessionKey === '__clawgpt_intelligence') {
+      if (state === 'delta' && content) {
+        this._intelligenceBuffer = content;
+        this.updateIntelligenceProgress(content);
+      } else if (state === 'final' || state === 'aborted') {
+        const finalContent = content || this._intelligenceBuffer || '';
+        this._intelligenceBuffer = '';
+        this.handleIntelligenceResponse(finalContent);
+      } else if (state === 'error') {
+        this._intelligenceBuffer = '';
+        this.handleIntelligenceError(payload.errorMessage || 'Extraction failed');
+      }
+      return;
+    }
+
     // Check if this event is for our session (handle both short and full session keys)
     if (payload.sessionKey &&
         payload.sessionKey !== this.sessionKey &&
@@ -6114,6 +7487,11 @@ Example: [0, 2, 5]`;
     if (state === 'delta' && content) {
       this.streamBuffer = content;
       this.updateStreamingMessage();
+
+      // Talk Mode: stream to TTS
+      if (this.talkModeActive && this._talkWaitingForResponse) {
+        this.handleTalkStreamDelta(content);
+      }
 
       // Forward streaming to phone (throttled to 100ms)
       if (this.relayEncrypted && this.currentChatId) {
@@ -6146,7 +7524,17 @@ Example: [0, 2, 5]`;
       } else if (finalContent) {
         // Track output tokens
         this.addTokens(this.estimateTokens(finalContent));
-        this.addAssistantMessage(finalContent);
+
+        // Extract file attachments from payload
+        const attachments = this.extractFileAttachments(payload.message);
+        this.addAssistantMessage(finalContent, attachments);
+
+        // Feed to Talk Mode if active
+        if (this.talkModeActive && this._talkWaitingForResponse) {
+          // Reset streaming position for next time
+          this._lastTtsBufferPos = 0;
+          this.handleTalkModeResponse(finalContent);
+        }
       }
 
       this.streamBuffer = '';
@@ -6186,7 +7574,7 @@ Example: [0, 2, 5]`;
     this.scrollToBottom();
   }
 
-  addAssistantMessage(content) {
+  addAssistantMessage(content, attachments = null) {
     if (!this.currentChatId || !this.chats[this.currentChatId]) return;
     if (!content || !content.trim()) return; // Skip empty messages
 
@@ -6196,9 +7584,19 @@ Example: [0, 2, 5]`;
       content: content,
       timestamp: Date.now()
     };
+
+    // Add file attachments if present
+    if (attachments && attachments.length > 0) {
+      assistantMsg.attachments = attachments;
+    }
     this.chats[this.currentChatId].messages.push(assistantMsg);
     this.chats[this.currentChatId].updatedAt = Date.now();
     this.saveChats(); // Save without broadcasting full chat (incremental relay below)
+
+    // Show desktop notification if enabled
+    const chat = this.chats[this.currentChatId];
+    const preview = content.substring(0, 100) + (content.length > 100 ? '...' : '');
+    this.showNotification(chat.title || 'ClawGPT', preview);
 
     // Send only the new message to phone (not the entire chat)
     if (this.relayEncrypted) {
@@ -6210,7 +7608,6 @@ Example: [0, 2, 5]`;
     }
 
     // Store in clawgpt-memory for search
-    const chat = this.chats[this.currentChatId];
     this.memoryStorage.storeMessage(
       this.currentChatId,
       chat.title,
@@ -6219,6 +7616,16 @@ Example: [0, 2, 5]`;
     ).catch(err => console.warn('Memory storage failed:', err));
 
     this.renderMessages();
+
+    // Detect artifacts in the new assistant message
+    this.detectAndSaveArtifacts(assistantMsg.id);
+
+    // Generate AI title after first response if needed
+    if (chat.needsAITitle && chat.messages.length >= 2) {
+      delete chat.needsAITitle; // Clear flag
+      this.saveChats();
+      this.generateAITitle(this.currentChatId);
+    }
 
     // Check if we should generate/update summary
     this.maybeGenerateSummary(this.currentChatId);
@@ -6361,9 +7768,2273 @@ Return this exact JSON structure:
 
     this.pendingSummary = null;
   }
+
+  // ===== AI TITLE GENERATION =====
+
+  async generateAITitle(chatId) {
+    const chat = this.chats[chatId];
+    if (!chat || !this.connected) return;
+
+    // Need at least one exchange to generate a title
+    if (chat.messages.length < 2) return;
+
+    // Build conversation context (first 2-3 exchanges max)
+    const messagesToUse = chat.messages.slice(0, Math.min(6, chat.messages.length));
+    const conversation = messagesToUse.map(m => {
+      const role = m.role === 'user' ? 'User' : 'Assistant';
+      // Truncate very long messages
+      const content = m.content.length > 300
+        ? m.content.slice(0, 300) + '...'
+        : m.content;
+      return `${role}: ${content}`;
+    }).join('\n\n');
+
+    const prompt = `Based on this conversation, generate a concise 3-5 word title. Return ONLY the title text, no quotes, no explanation:
+
+${conversation}
+
+Title:`;
+
+    try {
+      console.log('Generating AI title for chat:', chatId);
+
+      // Track title prompt tokens
+      this.addTokens(this.estimateTokens(prompt));
+
+      // Use a temporary session
+      const result = await this.request('chat.send', {
+        sessionKey: '__clawgpt_title_gen',
+        message: prompt,
+        deliver: false,
+        idempotencyKey: 'title-' + chatId + '-' + Date.now()
+      });
+
+      // Response comes via events
+      this.pendingTitleGen = { chatId, startedAt: Date.now() };
+
+      // Show visual feedback
+      this.showToast('Generating title...', false);
+
+    } catch (error) {
+      console.error('Failed to generate title:', error);
+      this.showToast('Title generation failed', true);
+    }
+  }
+
+  handleTitleResponse(content) {
+    if (!this.pendingTitleGen) return;
+
+    // Track title response tokens
+    this.addTokens(this.estimateTokens(content));
+
+    const { chatId } = this.pendingTitleGen;
+    const chat = this.chats[chatId];
+
+    if (!chat) {
+      this.pendingTitleGen = null;
+      return;
+    }
+
+    try {
+      // Clean up the response (remove quotes, extra whitespace, etc.)
+      let title = content.trim()
+        .replace(/^["']|["']$/g, '') // Remove surrounding quotes
+        .replace(/^Title:\s*/i, '') // Remove "Title:" prefix if present
+        .replace(/\n.*/s, '') // Take only first line
+        .trim();
+
+      // Limit length
+      if (title.length > 50) {
+        title = title.substring(0, 47) + '...';
+      }
+
+      // Use the title if it looks reasonable
+      if (title.length > 0 && title.length < 100) {
+        const oldTitle = chat.title;
+        chat.title = title;
+        this.saveChats();
+        
+        // Force UI update
+        this.renderChatList();
+        
+        // If this is the current chat, update the header too
+        if (this.currentChatId === chatId) {
+          this.renderMessages();
+        }
+        
+        console.log(`AI title updated: "${oldTitle}" → "${title}"`);
+        this.showToast('Title updated', false);
+      } else {
+        console.warn('Generated title looks invalid:', title);
+        this.showToast('Title generation failed', true);
+      }
+
+    } catch (error) {
+      console.error('Failed to parse title response:', error, content);
+      this.showToast('Title generation failed', true);
+    }
+
+    this.pendingTitleGen = null;
+  }
+
+  // ========================================
+  // Intelligence Panel — AI-Powered Extraction
+  // ========================================
+
+  static INTELLIGENCE_DEFAULT_PROMPT = `You are a conversation analyst. Analyze the following conversation and extract it into well-structured markdown files.
+
+RULES:
+1. If the conversation covers ONE topic, produce exactly ONE file.
+2. If the conversation covers MULTIPLE distinct topics (e.g., user switched subjects mid-conversation), produce SEPARATE files for each topic.
+3. Each file should be a complete, self-contained markdown document that gives another AI agent enough context to understand the topic WITHOUT needing the original conversation.
+4. Include: key decisions made, action items, technical details, code snippets, links, and important context.
+5. Remove conversational fluff (greetings, "let me check", "sure thing", etc.) — keep only substantive content.
+6. Use clear markdown structure with headers, lists, and code blocks.
+7. Generate a descriptive filename (kebab-case, .md extension).
+
+OUTPUT FORMAT — Return ONLY valid JSON, no markdown fences, no explanation:
+[
+  {
+    "filename": "descriptive-topic-name.md",
+    "title": "Human Readable Title",
+    "markdown": "# Title\\n\\n## Section\\n\\nContent here..."
+  }
+]
+
+If multiple files, return multiple objects in the array.`;
+
+  updateIntelligenceButton() {
+    const chat = this.currentChatId ? this.chats[this.currentChatId] : null;
+    const hasMessages = chat && chat.messages.length > 0;
+    this.elements.intelligenceBtn.disabled = !hasMessages;
+  }
+
+  // --- Right Panel (Intelligence + Artifacts) ---
+
+  openRightPanel(tab = 'intelligence') {
+    const panel = this.elements.rightPanel;
+    panel.classList.add('open');
+    this.switchRightPanelTab(tab);
+  }
+
+  closeRightPanel() {
+    const panel = this.elements.rightPanel;
+    panel.classList.remove('open');
+    this.elements.intelligenceBtn.classList.remove('active');
+    this.elements.artifactsBtn.classList.remove('active');
+    this.elements.workspaceBtn.classList.remove('active');
+  }
+
+  switchRightPanelTab(tab) {
+    // Update tab buttons
+    this.elements.intelligenceTab.classList.toggle('active', tab === 'intelligence');
+    this.elements.artifactsTab.classList.toggle('active', tab === 'artifacts');
+    this.elements.workspaceTab.classList.toggle('active', tab === 'workspace');
+
+    // Update header buttons
+    this.elements.intelligenceBtn.classList.toggle('active', tab === 'intelligence');
+    this.elements.artifactsBtn.classList.toggle('active', tab === 'artifacts');
+    this.elements.workspaceBtn.classList.toggle('active', tab === 'workspace');
+
+    // Show/hide panel content
+    this.elements.intelligencePanel.style.display = tab === 'intelligence' ? 'flex' : 'none';
+    this.elements.artifactsPanel.style.display = tab === 'artifacts' ? 'flex' : 'none';
+    this.elements.workspacePanel.style.display = tab === 'workspace' ? 'flex' : 'none';
+
+    // Load data for the active tab
+    if (tab === 'intelligence') {
+      this.loadIntelligenceForCurrentChat();
+    } else if (tab === 'artifacts') {
+      this.loadArtifactsForCurrentChat();
+    } else if (tab === 'workspace') {
+      this.loadWorkspaceFiles();
+    }
+  }
+
+  loadIntelligenceForCurrentChat() {
+    const chat = this.chats[this.currentChatId];
+    if (!chat) return;
+
+    // Update info line
+    const msgCount = chat.messages.length;
+    this.elements.intelligenceInfo.textContent = `claude-sonnet-4-5-20250514 • ${msgCount} messages`;
+
+    // Show existing results if available
+    if (chat.intelligenceVersions && chat.intelligenceVersions.length > 0) {
+      const currentVer = chat.intelligenceCurrentVersion || chat.intelligenceVersions.length;
+      this.showVersionControls(chat);
+      const version = chat.intelligenceVersions.find(v => v.version === currentVer) || chat.intelligenceVersions[chat.intelligenceVersions.length - 1];
+      this.renderIntelligenceFiles(version.files);
+    }
+  }
+
+  toggleIntelligencePanel() {
+    const panel = this.elements.rightPanel;
+    if (panel.classList.contains('open') && this.elements.intelligenceTab.classList.contains('active')) {
+      this.closeRightPanel();
+    } else {
+      this.openRightPanel('intelligence');
+    }
+  }
+
+  openIntelligencePanel() {
+    this.openRightPanel('intelligence');
+  }
+
+  closeIntelligencePanel() {
+    this.closeRightPanel();
+  }
+
+  initRightPanelResize() {
+    const handle = this.elements.rightPanelResizeHandle;
+    const panel = this.elements.rightPanel;
+    let startX, startWidth;
+
+    const onMouseMove = (e) => {
+      const dx = startX - (e.clientX || e.touches[0].clientX);
+      const newWidth = Math.max(280, Math.min(800, startWidth + dx));
+      panel.style.width = newWidth + 'px';
+    };
+
+    const onMouseUp = () => {
+      handle.classList.remove('dragging');
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.removeEventListener('touchmove', onMouseMove);
+      document.removeEventListener('touchend', onMouseUp);
+    };
+
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      startX = e.clientX;
+      startWidth = panel.offsetWidth;
+      handle.classList.add('dragging');
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
+
+    handle.addEventListener('touchstart', (e) => {
+      startX = e.touches[0].clientX;
+      startWidth = panel.offsetWidth;
+      handle.classList.add('dragging');
+      document.addEventListener('touchmove', onMouseMove, { passive: false });
+      document.addEventListener('touchend', onMouseUp);
+    });
+  }
+
+  // --- Artifacts Detection and Rendering ---
+
+  detectArtifacts(message) {
+    if (!message || !message.content || message.role !== 'assistant') return [];
+
+    const artifacts = [];
+    const content = message.content;
+
+    // Regex to match code blocks with language tags
+    const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
+    let match;
+    let artifactId = 0;
+
+    while ((match = codeBlockRegex.exec(content)) !== null) {
+      const language = match[1] || 'text';
+      const code = match[2].trim();
+      const lineCount = code.split('\n').length;
+
+      // Heuristic: detect artifact-worthy content
+      let isArtifact = false;
+      let type = 'code';
+      let name = `${language} code`;
+
+      // Check if it's a complete HTML file
+      if (language === 'html' && (code.includes('<html') || code.includes('<!DOCTYPE'))) {
+        isArtifact = true;
+        type = 'html';
+        name = 'HTML Document';
+      }
+      // Check if it's SVG
+      else if (language === 'svg' || code.includes('<svg')) {
+        isArtifact = true;
+        type = 'svg';
+        name = 'SVG Graphic';
+      }
+      // Check if it's Mermaid diagram
+      else if (language === 'mermaid') {
+        isArtifact = true;
+        type = 'mermaid';
+        name = 'Mermaid Diagram';
+      }
+      // Check if it's Markdown
+      else if (language === 'markdown' || language === 'md') {
+        if (lineCount > 10 || code.includes('# ')) {
+          isArtifact = true;
+          type = 'markdown';
+          name = 'Markdown Document';
+        }
+      }
+      // Check if it's CSV
+      else if (language === 'csv' || (code.includes(',') && lineCount > 2)) {
+        const lines = code.split('\n');
+        const firstLine = lines[0];
+        if (firstLine.split(',').length > 1) {
+          isArtifact = true;
+          type = 'csv';
+          name = 'CSV Data';
+        }
+      }
+      // Generic code artifact (if more than 10 lines or looks like a complete file)
+      else if (lineCount > 10) {
+        isArtifact = true;
+        type = 'code';
+        name = `${language.toUpperCase()} Code`;
+      }
+
+      if (isArtifact) {
+        artifacts.push({
+          id: `artifact-${message.id}-${artifactId++}`,
+          type,
+          language,
+          name,
+          content: code,
+          timestamp: message.timestamp || Date.now()
+        });
+      }
+    }
+
+    return artifacts;
+  }
+
+  async detectAndSaveArtifacts(messageId) {
+    const chat = this.chats[this.currentChatId];
+    if (!chat) return;
+
+    const message = chat.messages.find(m => m.id === messageId);
+    if (!message) return;
+
+    const artifacts = this.detectArtifacts(message);
+
+    if (artifacts.length > 0) {
+      if (!chat.artifacts) chat.artifacts = [];
+
+      // Add new artifacts
+      artifacts.forEach(artifact => {
+        const existing = chat.artifacts.find(a => a.id === artifact.id);
+        if (!existing) {
+          chat.artifacts.push(artifact);
+        }
+      });
+
+      await this.saveChats();
+      this.updateArtifactsBadge();
+
+      // If artifacts panel is open, refresh it
+      if (this.elements.artifactsTab.classList.contains('active')) {
+        this.loadArtifactsForCurrentChat();
+      }
+    }
+  }
+
+  scanExistingArtifacts() {
+    const chat = this.chats[this.currentChatId];
+    if (!chat || chat._artifactsScanned) return;
+    
+    // Scan all assistant messages for artifacts
+    let foundAny = false;
+    chat.messages.forEach(msg => {
+      if (msg.role === 'assistant') {
+        const artifacts = this.detectArtifacts(msg);
+        if (artifacts.length > 0) {
+          if (!chat.artifacts) chat.artifacts = [];
+          artifacts.forEach(a => {
+            if (!chat.artifacts.find(existing => existing.id === a.id)) {
+              chat.artifacts.push(a);
+              foundAny = true;
+            }
+          });
+        }
+      }
+    });
+    
+    chat._artifactsScanned = true;
+    if (foundAny) {
+      this.saveChats();
+      this.updateArtifactsBadge();
+    }
+  }
+
+  loadArtifactsForCurrentChat() {
+    const chat = this.chats[this.currentChatId];
+    if (!chat) {
+      this.renderArtifacts([]);
+      return;
+    }
+
+    const artifacts = chat.artifacts || [];
+    this.renderArtifacts(artifacts);
+  }
+
+  updateArtifactsBadge() {
+    const chat = this.chats[this.currentChatId];
+    const count = (chat && chat.artifacts) ? chat.artifacts.length : 0;
+
+    if (count > 0) {
+      this.elements.artifactsBadge.textContent = count;
+      this.elements.artifactsBadge.style.display = 'block';
+      this.elements.artifactsTabBadge.textContent = count;
+      this.elements.artifactsTabBadge.style.display = 'inline';
+      this.elements.artifactsBtn.disabled = false;
+    } else {
+      this.elements.artifactsBadge.style.display = 'none';
+      this.elements.artifactsTabBadge.style.display = 'none';
+      this.elements.artifactsBtn.disabled = true;
+    }
+  }
+
+  renderArtifacts(artifacts) {
+    const container = this.elements.artifactsList;
+
+    if (!artifacts || artifacts.length === 0) {
+      container.innerHTML = `
+        <div class="artifacts-empty">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48">
+            <polyline points="16 18 22 12 16 6"></polyline>
+            <polyline points="8 6 2 12 8 18"></polyline>
+          </svg>
+          <p>No artifacts yet</p>
+          <p class="artifacts-empty-hint">Code, HTML, SVG, and diagrams will appear here</p>
+        </div>
+      `;
+      return;
+    }
+
+    // Render artifacts in reverse order (newest first)
+    const sortedArtifacts = [...artifacts].reverse();
+    container.innerHTML = sortedArtifacts.map(artifact => this.renderArtifactCard(artifact)).join('');
+
+    // Attach event listeners
+    sortedArtifacts.forEach(artifact => {
+      this.attachArtifactEventListeners(artifact);
+    });
+  }
+
+  renderArtifactCard(artifact) {
+    const typeIcon = this.getArtifactTypeIcon(artifact.type);
+    const viewToggle = (artifact.type === 'html' || artifact.type === 'svg' || artifact.type === 'markdown')
+      ? this.renderArtifactViewToggle(artifact)
+      : '';
+
+    return `
+      <div class="artifact-card" id="${artifact.id}" data-artifact-id="${artifact.id}">
+        <div class="artifact-card-header">
+          <div class="artifact-card-title">
+            <div class="artifact-type-icon">${typeIcon}</div>
+            <div class="artifact-name">${artifact.name}</div>
+            <span class="artifact-type-badge">${artifact.type}</span>
+          </div>
+          <div class="artifact-card-toggle">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </div>
+        </div>
+        <div class="artifact-card-body">
+          ${viewToggle}
+          <div class="artifact-content" id="${artifact.id}-content">
+            ${this.renderArtifactContent(artifact, 'source')}
+          </div>
+          <div class="artifact-actions">
+            <button class="artifact-action-btn artifact-copy" data-artifact-id="${artifact.id}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              Copy
+            </button>
+            <button class="artifact-action-btn artifact-download" data-artifact-id="${artifact.id}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Download
+            </button>
+            ${artifact.type === 'html' ? `
+            <button class="artifact-action-btn artifact-open primary" data-artifact-id="${artifact.id}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+              Open
+            </button>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  renderArtifactViewToggle(artifact) {
+    return `
+      <div class="artifact-view-toggle">
+        <button class="artifact-view-btn active" data-artifact-id="${artifact.id}" data-view="source">Source</button>
+        <button class="artifact-view-btn" data-artifact-id="${artifact.id}" data-view="preview">Preview</button>
+      </div>
+    `;
+  }
+
+  renderArtifactContent(artifact, view = 'source') {
+    if (view === 'source' || artifact.type === 'code') {
+      return `
+        <div class="artifact-code-block">
+          <pre><code class="language-${artifact.language}">${this.escapeHtml(artifact.content)}</code></pre>
+        </div>
+      `;
+    } else if (view === 'preview') {
+      if (artifact.type === 'html' || artifact.type === 'svg') {
+        const sandboxedContent = artifact.type === 'svg'
+          ? artifact.content
+          : artifact.content;
+        return `
+          <iframe class="artifact-preview-iframe" sandbox="allow-scripts" srcdoc="${this.escapeHtml(sandboxedContent)}"></iframe>
+        `;
+      } else if (artifact.type === 'markdown') {
+        return `
+          <div class="artifact-markdown-preview">${this.renderMarkdown(artifact.content)}</div>
+        `;
+      } else if (artifact.type === 'mermaid') {
+        return `
+          <div class="artifact-mermaid-diagram" id="${artifact.id}-mermaid">${artifact.content}</div>
+        `;
+      } else if (artifact.type === 'csv') {
+        return this.renderCSVTable(artifact.content);
+      }
+    }
+
+    return '';
+  }
+
+  getArtifactTypeIcon(type) {
+    const icons = {
+      code: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>',
+      html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>',
+      svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
+      markdown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg>',
+      mermaid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>',
+      csv: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>'
+    };
+    return icons[type] || icons.code;
+  }
+
+  renderCSVTable(csvContent) {
+    const lines = csvContent.trim().split('\n');
+    if (lines.length < 2) return `<div class="artifact-table-container">Invalid CSV</div>`;
+
+    const headers = lines[0].split(',').map(h => h.trim());
+    const rows = lines.slice(1).map(line => line.split(',').map(cell => cell.trim()));
+
+    const tableHTML = `
+      <div class="artifact-table-container">
+        <table class="artifact-table">
+          <thead>
+            <tr>${headers.map(h => `<th>${this.escapeHtml(h)}</th>`).join('')}</tr>
+          </thead>
+          <tbody>
+            ${rows.map(row => `<tr>${row.map(cell => `<td>${this.escapeHtml(cell)}</td>`).join('')}</tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    return tableHTML;
+  }
+
+  attachArtifactEventListeners(artifact) {
+    // Toggle card collapse
+    const card = document.getElementById(artifact.id);
+    if (!card) return;
+
+    const header = card.querySelector('.artifact-card-header');
+    header.addEventListener('click', () => {
+      card.classList.toggle('collapsed');
+    });
+
+    // View toggle buttons
+    const viewButtons = card.querySelectorAll('.artifact-view-btn');
+    viewButtons.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const view = btn.dataset.view;
+        const artifactId = btn.dataset.artifactId;
+        const artifact = this.getArtifactById(artifactId);
+        if (!artifact) return;
+
+        // Update active button
+        viewButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        // Re-render content
+        const contentDiv = document.getElementById(`${artifactId}-content`);
+        contentDiv.innerHTML = this.renderArtifactContent(artifact, view);
+
+        // If mermaid, render it
+        if (view === 'preview' && artifact.type === 'mermaid') {
+          this.renderMermaidDiagram(artifact);
+        }
+
+        // Apply syntax highlighting if showing source
+        if (view === 'source' && typeof Prism !== 'undefined') {
+          Prism.highlightAllUnder(contentDiv);
+        }
+      });
+    });
+
+    // Copy button
+    const copyBtn = card.querySelector('.artifact-copy');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.copyArtifact(artifact.id);
+      });
+    }
+
+    // Download button
+    const downloadBtn = card.querySelector('.artifact-download');
+    if (downloadBtn) {
+      downloadBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.downloadArtifact(artifact.id);
+      });
+    }
+
+    // Open button
+    const openBtn = card.querySelector('.artifact-open');
+    if (openBtn) {
+      openBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.openArtifactInNewTab(artifact.id);
+      });
+    }
+
+    // Apply syntax highlighting
+    if (typeof Prism !== 'undefined') {
+      Prism.highlightAllUnder(card);
+    }
+  }
+
+  getArtifactById(id) {
+    const chat = this.chats[this.currentChatId];
+    if (!chat || !chat.artifacts) return null;
+    return chat.artifacts.find(a => a.id === id);
+  }
+
+  copyArtifact(id) {
+    const artifact = this.getArtifactById(id);
+    if (!artifact) return;
+
+    navigator.clipboard.writeText(artifact.content).then(() => {
+      const btn = document.querySelector(`.artifact-copy[data-artifact-id="${id}"]`);
+      if (btn) {
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> Copied!';
+        setTimeout(() => {
+          btn.innerHTML = originalText;
+        }, 2000);
+      }
+    });
+  }
+
+  downloadArtifact(id) {
+    const artifact = this.getArtifactById(id);
+    if (!artifact) return;
+
+    const extension = artifact.language || 'txt';
+    const filename = `${artifact.name.toLowerCase().replace(/\s+/g, '-')}.${extension}`;
+    const blob = new Blob([artifact.content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  openArtifactInNewTab(id) {
+    const artifact = this.getArtifactById(id);
+    if (!artifact || artifact.type !== 'html') return;
+
+    const blob = new Blob([artifact.content], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  }
+
+  async renderMermaidDiagram(artifact) {
+    // Lazy load Mermaid.js
+    if (typeof mermaid === 'undefined') {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js';
+      script.onload = () => {
+        mermaid.initialize({ startOnLoad: false, theme: 'dark' });
+        this.renderMermaidDiagram(artifact);
+      };
+      document.head.appendChild(script);
+      return;
+    }
+
+    const container = document.getElementById(`${artifact.id}-mermaid`);
+    if (!container) return;
+
+    try {
+      const { svg } = await mermaid.render(`mermaid-${artifact.id}`, artifact.content);
+      container.innerHTML = svg;
+    } catch (err) {
+      container.innerHTML = `<p style="color: #ef4444; padding: 20px;">Error rendering diagram: ${err.message}</p>`;
+    }
+  }
+
+  // --- Prompt Management ---
+
+  loadIntelligencePrompts() {
+    try {
+      const stored = localStorage.getItem('clawgpt-intel-prompts');
+      this._intelligencePrompts = stored ? JSON.parse(stored) : { custom: {}, selected: 'default' };
+    } catch {
+      this._intelligencePrompts = { custom: {}, selected: 'default' };
+    }
+    this.rebuildPromptSelect();
+  }
+
+  saveIntelligencePrompts() {
+    localStorage.setItem('clawgpt-intel-prompts', JSON.stringify(this._intelligencePrompts));
+  }
+
+  rebuildPromptSelect() {
+    const select = this.elements.intelligencePromptSelect;
+    select.innerHTML = '<option value="default">Default prompt</option>';
+    for (const name of Object.keys(this._intelligencePrompts.custom || {})) {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      select.appendChild(opt);
+    }
+    select.value = this._intelligencePrompts.selected || 'default';
+  }
+
+  getSelectedPrompt() {
+    const sel = this._intelligencePrompts.selected || 'default';
+    if (sel === 'default') return ClawGPT.INTELLIGENCE_DEFAULT_PROMPT;
+    return this._intelligencePrompts.custom[sel] || ClawGPT.INTELLIGENCE_DEFAULT_PROMPT;
+  }
+
+  onPromptSelected(e) {
+    this._intelligencePrompts.selected = e.target.value;
+    this.saveIntelligencePrompts();
+  }
+
+  togglePromptEditor() {
+    const editor = this.elements.intelligencePromptEditor;
+    if (editor.style.display === 'none') {
+      this.elements.intelligencePromptTextarea.value = this.getSelectedPrompt();
+      this.elements.intelligencePromptName.value = this._intelligencePrompts.selected === 'default' ? '' : this._intelligencePrompts.selected;
+      editor.style.display = 'block';
+    } else {
+      editor.style.display = 'none';
+    }
+  }
+
+  hidePromptEditor() {
+    this.elements.intelligencePromptEditor.style.display = 'none';
+  }
+
+  saveCustomPrompt() {
+    const name = this.elements.intelligencePromptName.value.trim();
+    const text = this.elements.intelligencePromptTextarea.value.trim();
+    if (!name) {
+      this.showToast('Enter a name to save the prompt', true);
+      return;
+    }
+    if (!text) return;
+    this._intelligencePrompts.custom[name] = text;
+    this._intelligencePrompts.selected = name;
+    this.saveIntelligencePrompts();
+    this.rebuildPromptSelect();
+    this.hidePromptEditor();
+    this.showToast(`Prompt "${name}" saved`);
+  }
+
+  // --- Version Management ---
+
+  showVersionControls(chat) {
+    if (!chat.intelligenceVersions || chat.intelligenceVersions.length === 0) {
+      this.elements.intelligenceVersionControls.style.display = 'none';
+      return;
+    }
+    this.elements.intelligenceVersionControls.style.display = 'flex';
+    const select = this.elements.intelligenceVersionSelect;
+    select.innerHTML = '';
+    for (const v of chat.intelligenceVersions) {
+      const opt = document.createElement('option');
+      opt.value = v.version;
+      const date = new Date(v.timestamp).toLocaleTimeString();
+      opt.textContent = `v${v.version} — ${date}`;
+      select.appendChild(opt);
+    }
+    select.value = chat.intelligenceCurrentVersion || chat.intelligenceVersions.length;
+  }
+
+  onVersionSelected(e) {
+    const chat = this.chats[this.currentChatId];
+    if (!chat || !chat.intelligenceVersions) return;
+    const ver = parseInt(e.target.value);
+    chat.intelligenceCurrentVersion = ver;
+    const version = chat.intelligenceVersions.find(v => v.version === ver);
+    if (version) {
+      this.renderIntelligenceFiles(version.files);
+    }
+  }
+
+  // --- AI Extraction ---
+
+  buildConversationText(messages) {
+    let text = '';
+    for (const msg of messages) {
+      if (!msg.content?.trim()) continue;
+      const role = msg.role === 'user' ? 'USER' : 'ASSISTANT';
+      text += `${role}:\n${msg.content}\n\n`;
+    }
+    // Truncate very long conversations
+    const MAX_CHARS = 100000;
+    if (text.length > MAX_CHARS) {
+      const half = Math.floor(MAX_CHARS / 2);
+      const totalMsgs = messages.length;
+      const approxKept = Math.ceil(totalMsgs * (MAX_CHARS / text.length));
+      text = text.substring(0, half) +
+        `\n\n... [approximately ${totalMsgs - approxKept} messages truncated for length] ...\n\n` +
+        text.substring(text.length - half);
+    }
+    return text;
+  }
+
+  runIntelligenceExtraction() {
+    const chat = this.chats[this.currentChatId];
+    if (!chat || chat.messages.length === 0) return;
+    if (!this.connected) {
+      this.showToast('Not connected to gateway', true);
+      return;
+    }
+
+    // Show loading
+    this.elements.intelligenceResults.innerHTML = `
+      <div class="intelligence-loading">
+        <div class="intelligence-spinner"></div>
+        <span>Analyzing conversation with Sonnet 4.5...</span>
+      </div>
+    `;
+    this.elements.intelligenceGenerateBtn.disabled = true;
+    this.elements.intelligenceFooter.style.display = 'none';
+
+    // Build the extraction message
+    const prompt = this.getSelectedPrompt();
+    const conversationText = this.buildConversationText(chat.messages);
+    const fullMessage = `${prompt}\n\n---\n\nCONVERSATION TO ANALYZE:\n\n${conversationText}`;
+
+    // Track tokens
+    this.addTokens(this.estimateTokens(fullMessage));
+
+    // Store pending extraction context
+    this._pendingIntelligence = {
+      chatId: this.currentChatId,
+      promptUsed: this._intelligencePrompts.selected || 'default',
+      startedAt: Date.now()
+    };
+    this._intelligenceBuffer = '';
+
+    // Send via gateway to a dedicated session
+    this.request('chat.send', {
+      sessionKey: '__clawgpt_intelligence',
+      message: fullMessage,
+      deliver: false,
+      idempotencyKey: 'intel-' + this.currentChatId + '-' + Date.now()
+    }).catch(err => {
+      console.error('Intelligence extraction failed:', err);
+      this.handleIntelligenceError(err.message);
+    });
+  }
+
+  updateIntelligenceProgress(content) {
+    // Silently buffer — don't update UI on every chunk.
+    // The loading spinner from runIntelligenceExtraction() stays visible.
+  }
+
+  handleIntelligenceResponse(content) {
+    this.elements.intelligenceGenerateBtn.disabled = false;
+
+    if (!this._pendingIntelligence) return;
+    const { chatId, promptUsed } = this._pendingIntelligence;
+    this._pendingIntelligence = null;
+
+    const chat = this.chats[chatId];
+    if (!chat) return;
+
+    // Track response tokens
+    this.addTokens(this.estimateTokens(content));
+
+    // Parse JSON response
+    let files;
+    try {
+      // Try to extract JSON from the response (handle markdown fences)
+      let jsonStr = content.trim();
+      // Strip markdown code fences if present
+      if (jsonStr.startsWith('```')) {
+        jsonStr = jsonStr.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+      }
+      files = JSON.parse(jsonStr);
+      if (!Array.isArray(files)) {
+        files = [files]; // Wrap single object in array
+      }
+    } catch (err) {
+      console.error('Failed to parse intelligence response:', err, content.substring(0, 200));
+      // Fallback: treat the whole response as a single markdown file
+      files = [{
+        filename: 'conversation-extract.md',
+        title: chat.title || 'Conversation Extract',
+        markdown: content
+      }];
+    }
+
+    // Validate and clean files
+    files = files.map(f => ({
+      filename: f.filename || 'extract.md',
+      title: f.title || f.filename || 'Untitled',
+      markdown: f.markdown || f.content || ''
+    })).filter(f => f.markdown.trim().length > 0);
+
+    if (files.length === 0) {
+      this.elements.intelligenceResults.innerHTML = '<div class="intelligence-empty"><p>No content extracted. Try adjusting the prompt.</p></div>';
+      return;
+    }
+
+    // Version management
+    if (!chat.intelligenceVersions) chat.intelligenceVersions = [];
+
+    const replaceMode = this.elements.intelligenceReplaceCheck.checked;
+    if (replaceMode && chat.intelligenceVersions.length > 0) {
+      // Replace latest version
+      chat.intelligenceVersions[chat.intelligenceVersions.length - 1] = {
+        version: chat.intelligenceVersions[chat.intelligenceVersions.length - 1].version,
+        timestamp: Date.now(),
+        promptUsed,
+        files
+      };
+    } else {
+      // Create new version
+      const newVersion = (chat.intelligenceVersions.length > 0)
+        ? chat.intelligenceVersions[chat.intelligenceVersions.length - 1].version + 1
+        : 1;
+      chat.intelligenceVersions.push({
+        version: newVersion,
+        timestamp: Date.now(),
+        promptUsed,
+        files
+      });
+    }
+
+    chat.intelligenceCurrentVersion = chat.intelligenceVersions[chat.intelligenceVersions.length - 1].version;
+
+    // Clean up old v1 intelligenceData if present
+    delete chat.intelligenceData;
+
+    this.saveChats();
+    this.showVersionControls(chat);
+    this.renderIntelligenceFiles(files);
+  }
+
+  handleIntelligenceError(message) {
+    this.elements.intelligenceGenerateBtn.disabled = false;
+    this._pendingIntelligence = null;
+    this.elements.intelligenceResults.innerHTML = `
+      <div class="intelligence-empty">
+        <p style="color: var(--error-color, #f44);">Error: ${this.escapeHtml(message)}</p>
+        <p>Check gateway connection and try again.</p>
+      </div>
+    `;
+  }
+
+  // --- Rendering ---
+
+  renderIntelligenceFiles(files) {
+    const results = this.elements.intelligenceResults;
+    if (!files || files.length === 0) {
+      results.innerHTML = '<div class="intelligence-empty"><p>No files generated.</p></div>';
+      this.elements.intelligenceFooter.style.display = 'none';
+      return;
+    }
+
+    let html = '';
+    files.forEach((file, idx) => {
+      html += `<div class="intelligence-card" data-file-idx="${idx}">`;
+      html += `<div class="intelligence-card-header" data-action="toggle-card">`;
+      html += `<span class="intelligence-card-icon">📄</span>`;
+      html += `<span class="intelligence-card-title">${this.escapeHtml(file.filename)}</span>`;
+      html += `<span class="intelligence-card-toggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg></span>`;
+      html += `</div>`;
+      html += `<div class="intelligence-card-body">`;
+
+      // Render the markdown content as HTML
+      const rendered = this.renderMarkdownSimple(file.markdown);
+      html += `<div class="intelligence-file-content">${rendered}</div>`;
+
+      // Card actions
+      html += `<div class="intelligence-card-actions">`;
+      html += `<button class="intelligence-card-action-btn" data-action="copy-card" data-idx="${idx}" title="Copy markdown">`;
+      html += `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+      html += `Copy</button>`;
+      html += `<button class="intelligence-card-action-btn" data-action="download-card" data-idx="${idx}" title="Download .md file">`;
+      html += `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
+      html += `Download</button>`;
+      html += `</div>`;
+
+      html += `</div></div>`;
+    });
+
+    results.innerHTML = html;
+    this.elements.intelligenceFooter.style.display = files.length > 0 ? 'flex' : 'none';
+
+    // Syntax highlight code snippets
+    results.querySelectorAll('pre code[class*="language-"]').forEach(el => {
+      if (typeof Prism !== 'undefined') Prism.highlightElement(el);
+    });
+
+    // Event delegation for card actions
+    if (!this._intelligenceClickBound) {
+      this._intelligenceClickBound = true;
+      results.addEventListener('click', (e) => {
+        const toggleHeader = e.target.closest('[data-action="toggle-card"]');
+        if (toggleHeader) {
+          toggleHeader.closest('.intelligence-card').classList.toggle('collapsed');
+          return;
+        }
+        const copyBtn = e.target.closest('[data-action="copy-card"]');
+        if (copyBtn) {
+          this.copyIntelligenceFile(parseInt(copyBtn.dataset.idx), copyBtn);
+          return;
+        }
+        const downloadBtn = e.target.closest('[data-action="download-card"]');
+        if (downloadBtn) {
+          this.downloadIntelligenceFile(parseInt(downloadBtn.dataset.idx));
+          return;
+        }
+      });
+    }
+  }
+
+  renderMarkdownSimple(md) {
+    // Simple markdown to HTML renderer (no dependencies)
+    let html = this.escapeHtml(md);
+    // Headers
+    html = html.replace(/^### (.+)$/gm, '<h4>$1</h4>');
+    html = html.replace(/^## (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^# (.+)$/gm, '<h2>$1</h2>');
+    // Bold
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    // Inline code
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // Code blocks (```lang\n...\n```)
+    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+      const cls = lang ? ` class="language-${lang}"` : '';
+      return `<pre><code${cls}>${code}</code></pre>`;
+    });
+    // Lists
+    html = html.replace(/^- \[ \] (.+)$/gm, '<li class="task">☐ $1</li>');
+    html = html.replace(/^- \[x\] (.+)$/gm, '<li class="task done">☑ $1</li>');
+    html = html.replace(/^[-*] (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/(<li.*<\/li>\n?)+/g, '<ul>$&</ul>');
+    // Links
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    // Paragraphs (double newlines)
+    html = html.replace(/\n\n/g, '</p><p>');
+    html = '<p>' + html + '</p>';
+    // Clean up empty paragraphs
+    html = html.replace(/<p>\s*<\/p>/g, '');
+    // Fix headers inside paragraphs
+    html = html.replace(/<p>(<h[234]>)/g, '$1');
+    html = html.replace(/(<\/h[234]>)<\/p>/g, '$1');
+    // Fix pre inside paragraphs
+    html = html.replace(/<p>(<pre>)/g, '$1');
+    html = html.replace(/(<\/pre>)<\/p>/g, '$1');
+    // Fix ul inside paragraphs
+    html = html.replace(/<p>(<ul>)/g, '$1');
+    html = html.replace(/(<\/ul>)<\/p>/g, '$1');
+    return html;
+  }
+
+  // --- Copy / Download ---
+
+  copyIntelligenceFile(idx, btn) {
+    const chat = this.chats[this.currentChatId];
+    if (!chat?.intelligenceVersions) return;
+    const ver = chat.intelligenceCurrentVersion || chat.intelligenceVersions.length;
+    const version = chat.intelligenceVersions.find(v => v.version === ver);
+    if (!version || !version.files[idx]) return;
+
+    navigator.clipboard.writeText(version.files[idx].markdown).then(() => {
+      btn.classList.add('copied');
+      const origText = btn.innerHTML;
+      btn.innerHTML = btn.innerHTML.replace('Copy', 'Copied!');
+      setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = origText; }, 1500);
+    });
+  }
+
+  downloadIntelligenceFile(idx) {
+    const chat = this.chats[this.currentChatId];
+    if (!chat?.intelligenceVersions) return;
+    const ver = chat.intelligenceCurrentVersion || chat.intelligenceVersions.length;
+    const version = chat.intelligenceVersions.find(v => v.version === ver);
+    if (!version || !version.files[idx]) return;
+
+    const file = version.files[idx];
+    this.downloadFile(file.filename, file.markdown, 'text/markdown');
+  }
+
+  async downloadAllIntelligence() {
+    const chat = this.chats[this.currentChatId];
+    if (!chat?.intelligenceVersions) return;
+    const ver = chat.intelligenceCurrentVersion || chat.intelligenceVersions.length;
+    const version = chat.intelligenceVersions.find(v => v.version === ver);
+    if (!version) return;
+
+    if (version.files.length === 1) {
+      // Single file — download directly
+      const f = version.files[0];
+      this.downloadFile(f.filename, f.markdown, 'text/markdown');
+    } else if (typeof JSZip !== 'undefined') {
+      // Multiple files — create zip
+      const zip = new JSZip();
+      for (const f of version.files) {
+        zip.file(f.filename, f.markdown);
+      }
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const chatTitle = (chat.title || 'conversation').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `intelligence-${chatTitle}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } else {
+      // Fallback if JSZip not loaded — download each file individually
+      for (const f of version.files) {
+        this.downloadFile(f.filename, f.markdown, 'text/markdown');
+      }
+    }
+  }
+
+  downloadFile(filename, content, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // ========================================
+  // Talk Mode — Voice Conversation
+  // ========================================
+
+  initTalkMode() {
+    this.talkModeActive = false;
+    this.talkModeState = 'idle'; // idle, listening, thinking, speaking
+    this.talkModeHandsfree = true;
+    this.talkModePTTHeld = false;
+    this._talkTranscriptEntries = [];
+    this._talkSentenceBuffer = '';
+    this._talkStreamingComplete = false;
+    this._lastTtsBufferPos = 0;
+
+    // Initialize audio queue for ElevenLabs streaming
+    this.audioQueue = new AudioQueue(() => this.onAudioQueueEmpty());
+
+    const btn = document.getElementById('talkModeBtn');
+    const overlay = document.getElementById('talkModeOverlay');
+    const closeBtn = document.getElementById('talkModeClose');
+    const orb = document.getElementById('talkModeOrb');
+    const handsfreeBtn = document.getElementById('talkModeHandsfree');
+    const pttBtn = document.getElementById('talkModePTT');
+    const canvas = document.getElementById('talkModeCanvas');
+
+    if (!btn || !overlay) return;
+
+    btn.addEventListener('click', () => this.openTalkMode());
+    closeBtn.addEventListener('click', () => this.closeTalkMode());
+    orb.addEventListener('click', () => this.onOrbTap());
+
+    handsfreeBtn.addEventListener('click', () => {
+      this.talkModeHandsfree = true;
+      handsfreeBtn.classList.add('active');
+      pttBtn.classList.remove('active');
+      this.setTalkState('idle');
+      // Start listening automatically in handsfree mode
+      if (this.talkModeActive && !this._talkWaitingForResponse && this.talkModeState !== 'speaking') {
+        this.startTalkListening();
+      }
+    });
+    pttBtn.addEventListener('click', () => {
+      this.talkModeHandsfree = false;
+      pttBtn.classList.add('active');
+      handsfreeBtn.classList.remove('active');
+      // Stop any active listening when switching to PTT
+      this.stopTalkListening();
+      this.setTalkState('idle');
+    });
+
+    // Push-to-talk: hold spacebar
+    document.addEventListener('keydown', (e) => {
+      if (!this.talkModeActive || this.talkModeHandsfree) return;
+      if (e.code === 'Space' && !this.talkModePTTHeld) {
+        e.preventDefault();
+        this.talkModePTTHeld = true;
+        this.startTalkListening();
+      }
+    });
+    document.addEventListener('keyup', (e) => {
+      if (!this.talkModeActive || this.talkModeHandsfree) return;
+      if (e.code === 'Space' && this.talkModePTTHeld) {
+        e.preventDefault();
+        this.talkModePTTHeld = false;
+        this.stopTalkListening();
+      }
+    });
+
+    // Touch hold on orb for PTT
+    orb.addEventListener('touchstart', (e) => {
+      if (!this.talkModeActive || this.talkModeHandsfree) return;
+      e.preventDefault();
+      this.talkModePTTHeld = true;
+      this.startTalkListening();
+    });
+    orb.addEventListener('touchend', (e) => {
+      if (!this.talkModeActive || this.talkModeHandsfree) return;
+      e.preventDefault();
+      this.talkModePTTHeld = false;
+      this.stopTalkListening();
+    });
+
+    // Mouse hold on orb for PTT (desktop)
+    orb.addEventListener('mousedown', (e) => {
+      if (!this.talkModeActive || this.talkModeHandsfree) return;
+      e.preventDefault();
+      this.talkModePTTHeld = true;
+      this.startTalkListening();
+    });
+    orb.addEventListener('mouseup', (e) => {
+      if (!this.talkModeActive || this.talkModeHandsfree) return;
+      e.preventDefault();
+      this.talkModePTTHeld = false;
+      this.stopTalkListening();
+    });
+    // Also handle mouse leaving the orb while held
+    orb.addEventListener('mouseleave', (e) => {
+      if (!this.talkModeActive || this.talkModeHandsfree || !this.talkModePTTHeld) return;
+      this.talkModePTTHeld = false;
+      this.stopTalkListening();
+    });
+
+    // Escape to close
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Escape' && this.talkModeActive) this.closeTalkMode();
+    });
+
+    // Set up audio context for visualization
+    this._talkCanvas = canvas;
+    this._talkCtx = canvas ? canvas.getContext('2d') : null;
+  }
+
+  openTalkMode() {
+    if (!this.ttsSupported && !('speechSynthesis' in window)) {
+      this.showToast('Speech synthesis not supported in this browser', true);
+      return;
+    }
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      this.showToast('Speech recognition not supported in this browser', true);
+      return;
+    }
+
+    this.talkModeActive = true;
+    document.getElementById('talkModeOverlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    this._talkTranscriptEntries = [];
+    this.updateTalkTranscript();
+
+    // Create dedicated recognition for talk mode
+    this._talkRecognition = new SpeechRecognition();
+    this._talkRecognition.continuous = true;
+    this._talkRecognition.interimResults = true;
+    this._talkRecognition.lang = navigator.language || 'en-US';
+
+    this._talkFinalTranscript = '';
+    this._talkInterimTranscript = '';
+    this._talkMicDenied = false;
+
+    this._talkRecognition.onstart = () => {
+      console.log('[TalkMode] Recognition started');
+    };
+
+    this._talkRecognition.onaudiostart = () => {
+      console.log('[TalkMode] Audio capture started');
+    };
+
+    this._talkRecognition.onsoundstart = () => {
+      console.log('[TalkMode] Sound detected');
+    };
+
+    this._talkRecognition.onspeechstart = () => {
+      console.log('[TalkMode] Speech detected');
+    };
+
+    this._talkRecognition.onspeechend = () => {
+      console.log('[TalkMode] Speech ended');
+    };
+
+    this._talkRecognition.onsoundend = () => {
+      console.log('[TalkMode] Sound ended');
+    };
+
+    this._talkRecognition.onaudioend = () => {
+      console.log('[TalkMode] Audio capture ended');
+    };
+
+    this._talkSendTimer = null;
+
+    this._talkRecognition.onresult = (event) => {
+      console.log('[TalkMode] onresult fired, resultIndex:', event.resultIndex, 'results length:', event.results.length);
+      let interim = '';
+      let gotFinal = false;
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const t = event.results[i][0].transcript;
+        const confidence = event.results[i][0].confidence;
+        console.log('[TalkMode] Result', i, 'isFinal:', event.results[i].isFinal, 'transcript:', JSON.stringify(t), 'confidence:', confidence);
+        if (event.results[i].isFinal) {
+          this._talkFinalTranscript += t;
+          gotFinal = true;
+        } else {
+          interim += t;
+        }
+      }
+      this._talkInterimTranscript = interim;
+      // Show what's being heard
+      if (this._talkFinalTranscript || interim) {
+        this.setTalkStatus('🎙️ ' + (this._talkFinalTranscript + interim).slice(-60));
+      }
+
+      // When we get a final result, start a debounce timer to send
+      // This handles the case where continuous=true keeps recognition alive
+      if (gotFinal && this._talkFinalTranscript.trim()) {
+        clearTimeout(this._talkSendTimer);
+        this._talkSendTimer = setTimeout(() => {
+          // Only send if we still have a transcript and aren't already waiting
+          if (this._talkFinalTranscript.trim() && !this._talkWaitingForResponse) {
+            console.log('[TalkMode] Debounce timer fired, state:', this.talkModeState, 'waiting:', this._talkWaitingForResponse);
+            // Don't send if we're already waiting for a response or AI is speaking
+            if (this._talkWaitingForResponse || this.talkModeState === 'speaking') {
+              console.log('[TalkMode] Skipping send — already processing');
+              return;
+            }
+            const text = this._talkFinalTranscript.trim();
+            this._talkFinalTranscript = '';
+            this._talkInterimTranscript = '';
+            // Stop recognition while we wait for response
+            try { this._talkRecognition.stop(); } catch {}
+            this.sendTalkMessage(text);
+          }
+        }, 1500); // 1.5s of silence after last final result = send
+      }
+    };
+
+    this._talkRecognition.onend = () => {
+      console.log('[TalkMode] Recognition ended. finalTranscript:', JSON.stringify(this._talkFinalTranscript), 'state:', this.talkModeState, 'handsfree:', this.talkModeHandsfree, 'waitingForResponse:', this._talkWaitingForResponse);
+      
+      // Clear any pending send timer — we'll handle the transcript directly
+      clearTimeout(this._talkSendTimer);
+      
+      // If we have accumulated transcript, send it now
+      if (this._talkFinalTranscript.trim() && !this._talkWaitingForResponse) {
+        this.sendTalkMessage(this._talkFinalTranscript.trim());
+        this._talkFinalTranscript = '';
+        this._talkInterimTranscript = '';
+      } else if (this.talkModeActive && this.talkModeHandsfree && !this._talkMicDenied && this.talkModeState !== 'thinking' && this.talkModeState !== 'speaking' && !this._talkWaitingForResponse) {
+        // Restart listening in hands-free mode
+        this.startTalkListening();
+      }
+    };
+
+    this._talkNetworkRetries = 0;
+    this._talkRecognition.onerror = (event) => {
+      console.error('[TalkMode] Recognition error:', event.error, 'message:', event.message);
+      if (event.error === 'aborted' || event.error === 'no-speech') {
+        // These are normal — restart in hands-free
+        this._talkNetworkRetries = 0;
+        if (this.talkModeActive && this.talkModeHandsfree && !this._talkMicDenied && this.talkModeState !== 'thinking' && this.talkModeState !== 'speaking') {
+          setTimeout(() => this.startTalkListening(), 300);
+        }
+        return;
+      }
+      if (event.error === 'network') {
+        // Network error reaching Google speech service — retry with backoff
+        this._talkNetworkRetries++;
+        console.warn('[TalkMode] Network error, retry', this._talkNetworkRetries);
+        if (this._talkNetworkRetries <= 5 && this.talkModeActive) {
+          const delay = Math.min(1000 * this._talkNetworkRetries, 3000);
+          this.setTalkStatus('🔄 Speech service connection issue, retrying...');
+          setTimeout(() => {
+            if (this.talkModeActive) this.startTalkListening();
+          }, delay);
+        } else {
+          this.setTalkStatus('❌ Speech service unavailable — check network');
+        }
+        return;
+      }
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        // Mic permission denied — prevent retry loop
+        this._talkMicDenied = true;
+        console.warn('[TalkMode] Microphone access denied');
+        this.setTalkStatus('🎙️ Microphone access denied — check permissions');
+        return;
+      }
+      console.error('[TalkMode] Recognition error:', event.error);
+      this.setTalkStatus('Error: ' + event.error);
+    };
+
+    // Start audio visualization
+    this.startTalkVisualization();
+
+    // Start listening
+    this.setTalkState('idle');
+    if (this.talkModeHandsfree) {
+      setTimeout(() => this.startTalkListening(), 500);
+    } else {
+      this.setTalkStatus('Hold spacebar or tap orb to talk');
+    }
+  }
+
+  closeTalkMode() {
+    this.talkModeActive = false;
+    document.getElementById('talkModeOverlay').classList.remove('open');
+    document.body.style.overflow = '';
+
+    // Stop everything
+    if (this._talkRecognition) {
+      try { this._talkRecognition.stop(); } catch {}
+    }
+    speechSynthesis.cancel();
+    if (this.audioQueue) {
+      this.audioQueue.clear();
+    }
+    this.stopTalkVisualization();
+    this.talkModeState = 'idle';
+    this._talkStreamingComplete = false;
+    this._lastTtsBufferPos = 0;
+    this._talkSentenceBuffer = '';
+  }
+
+  onOrbTap() {
+    if (this.talkModeHandsfree) {
+      // In hands-free, orb tap toggles listening
+      if (this.talkModeState === 'listening') {
+        this.stopTalkListening();
+      } else if (this.talkModeState === 'speaking') {
+        // Interrupt AI speech
+        speechSynthesis.cancel();
+        this.setTalkState('idle');
+        this.startTalkListening();
+      } else {
+        this.startTalkListening();
+      }
+    }
+    // In PTT mode, orb click/tap handled by mousedown/mouseup/touchstart/touchend
+  }
+
+  setTalkState(state) {
+    this.talkModeState = state;
+    const orb = document.getElementById('talkModeOrb');
+    orb.className = 'talk-mode-orb ' + state;
+
+    switch (state) {
+      case 'idle':
+        if (this.talkModeHandsfree) this.setTalkStatus('Listening...');
+        else this.setTalkStatus('Hold spacebar or tap orb to talk');
+        break;
+      case 'listening':
+        this.setTalkStatus('🎙️ Listening...');
+        break;
+      case 'thinking':
+        this.setTalkStatus('🧠 Thinking...');
+        break;
+      case 'speaking':
+        this.setTalkStatus('🔊 Speaking...');
+        break;
+    }
+  }
+
+  setTalkStatus(text) {
+    const el = document.getElementById('talkModeStatus');
+    if (el) el.textContent = text;
+  }
+
+  startTalkListening() {
+    if (!this.talkModeActive) return;
+    console.log('[TalkMode] startTalkListening called');
+    this._talkMicDenied = false;
+    this._talkFinalTranscript = '';
+    this._talkInterimTranscript = '';
+    this.setTalkState('listening');
+    try {
+      this._talkRecognition.start();
+      console.log('[TalkMode] recognition.start() called successfully');
+    } catch (e) {
+      console.warn('[TalkMode] recognition.start() error:', e.message);
+    }
+  }
+
+  stopTalkListening() {
+    this.setTalkState('idle');
+    try {
+      this._talkRecognition.stop();
+    } catch {}
+  }
+
+  sendTalkMessage(text) {
+    console.log('[TalkMode] sendTalkMessage called with:', JSON.stringify(text), 'connected:', this.connected);
+    if (!text.trim() || !this.connected) return;
+
+    // Stop any currently playing audio before sending new message
+    if (this.audioQueue) {
+      this.audioQueue.clear();
+    }
+    speechSynthesis.cancel();
+
+    // Reset streaming TTS state for new message
+    this._talkSentenceBuffer = '';
+    this._lastTtsBufferPos = 0;
+    this._talkStreamingComplete = false;
+
+    // Add to transcript
+    this._talkTranscriptEntries.push({ role: 'user', text });
+    this.updateTalkTranscript();
+
+    this.setTalkState('thinking');
+
+    // Store callback for when response arrives
+    this._talkWaitingForResponse = true;
+
+    // Send message through existing gateway connection
+    // We need to manually handle this to avoid modifying the chat UI
+    const chat = this.chats[this.currentChatId];
+    if (!chat) return;
+
+    // Add user message to chat
+    chat.messages.push({
+      id: 'msg-' + Date.now(),
+      role: 'user',
+      content: text,
+      timestamp: Date.now()
+    });
+    chat.updatedAt = Date.now();
+    this.saveChats();
+    this.renderChatList();
+
+    // Send via gateway
+    this.streaming = true;
+    this.streamBuffer = '';
+    this.request('chat.send', {
+      sessionKey: this.sessionKey,
+      message: text,
+      deliver: false,
+      idempotencyKey: 'talk-' + Date.now()
+    }).catch(err => {
+      console.error('Talk mode send failed:', err);
+      this.setTalkState('idle');
+      this._talkWaitingForResponse = false;
+      if (this.talkModeHandsfree) this.startTalkListening();
+    });
+  }
+
+  handleTalkModeResponse(text) {
+    console.log('[TalkMode] handleTalkModeResponse called, waitingForResponse:', this._talkWaitingForResponse, 'active:', this.talkModeActive, 'text length:', text?.length);
+    if (!this._talkWaitingForResponse || !this.talkModeActive) return;
+    this._talkWaitingForResponse = false;
+
+    // Add to transcript
+    this._talkTranscriptEntries.push({ role: 'assistant', text: text.substring(0, 200) });
+    this.updateTalkTranscript();
+
+    // Speak the response
+    this.speakTalkResponse(text);
+  }
+
+  speakTalkResponse(text) {
+    if (!this.talkModeActive) return;
+
+    // Check if ElevenLabs streaming already handled the speech
+    if (this.ttsProvider === 'elevenlabs' && this.elevenlabsApiKey && this.streamingTts) {
+      // Streaming TTS was already handled via delta events, just flush buffer
+      this.handleTalkStreamEnd(text);
+      return;
+    }
+
+    this.setTalkState('speaking');
+
+    // Use ElevenLabs for non-streaming or browser TTS as fallback
+    if (this.ttsProvider === 'elevenlabs' && this.elevenlabsApiKey) {
+      this.speakWithElevenLabs(text);
+    } else {
+      this.speakWithBrowserTts(text);
+    }
+  }
+
+  // ElevenLabs streaming TTS support
+  handleTalkStreamDelta(content) {
+    if (!this.talkModeActive) return;
+
+    this.setTalkState('speaking');
+
+    if (this.ttsProvider === 'elevenlabs' && this.elevenlabsApiKey && this.streamingTts) {
+      // Streaming TTS: buffer into sentences
+      this.bufferForStreamingTts(content);
+    }
+  }
+
+  handleTalkStreamEnd(finalContent) {
+    if (!this.talkModeActive) return;
+    this._talkStreamingComplete = true;
+
+    if (this.ttsProvider === 'elevenlabs' && this.elevenlabsApiKey) {
+      if (this.streamingTts) {
+        // Flush remaining buffer
+        this.flushStreamingTtsBuffer();
+      } else {
+        // Non-streaming: send full response
+        this.speakWithElevenLabs(finalContent);
+      }
+    } else {
+      // Browser TTS for full response
+      this.speakWithBrowserTts(finalContent);
+    }
+
+    // If audio queue is already empty (all chunks played or no chunks were sent),
+    // trigger done immediately — otherwise onAudioQueueEmpty will handle it
+    setTimeout(() => {
+      if (this._talkStreamingComplete && this.audioQueue && !this.audioQueue.isPlaying && this.audioQueue.queue.length === 0) {
+        console.log('[TalkMode] Stream ended and queue already empty — triggering done');
+        this.onTtsDone();
+      }
+    }, 500);
+  }
+
+  bufferForStreamingTts(fullContent) {
+    // fullContent is the accumulated stream so far
+    // Find new text since last buffer point
+    let newText = fullContent.substring(this._lastTtsBufferPos || 0);
+    this._lastTtsBufferPos = fullContent.length;
+
+    // Skip tool calls, code blocks, and non-speech content
+    if (newText.includes('```') || newText.includes('<') || newText.includes('function_calls')) {
+      return; // Don't speak code/tool calls
+    }
+
+    this._talkSentenceBuffer += newText;
+
+    // Check if we have a complete sentence
+    const sentenceEnders = /[.!?\n]/;
+    if (sentenceEnders.test(this._talkSentenceBuffer) && this._talkSentenceBuffer.length > 20) {
+      const chunk = this._talkSentenceBuffer.trim();
+      this._talkSentenceBuffer = '';
+      if (chunk) this.speakWithElevenLabs(chunk);
+    } else if (this._talkSentenceBuffer.length > 150) {
+      // Long clause without punctuation
+      const chunk = this._talkSentenceBuffer.trim();
+      this._talkSentenceBuffer = '';
+      if (chunk) this.speakWithElevenLabs(chunk);
+    }
+  }
+
+  flushStreamingTtsBuffer() {
+    this._lastTtsBufferPos = 0;
+    if (this._talkSentenceBuffer.trim()) {
+      this.speakWithElevenLabs(this._talkSentenceBuffer.trim());
+      this._talkSentenceBuffer = '';
+    }
+  }
+
+  async speakWithElevenLabs(text) {
+    if (!text || !this.elevenlabsApiKey) return;
+
+    // Strip markdown, code, tool calls, and other non-speech content
+    const cleanText = text
+      .replace(/```[\s\S]*?```/g, '')           // code blocks
+      .replace(/<[^>]+>/g, '')                   // HTML/XML tags
+      .replace(/\{[^}]{20,}\}/g, '')             // JSON objects
+      .replace(/`([^`]+)`/g, '$1')               // inline code
+      .replace(/\*\*([^*]+)\*\*/g, '$1')         // bold
+      .replace(/\*([^*]+)\*/g, '$1')             // italic
+      .replace(/#+\s/g, '')                      // headers
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')   // links
+      .replace(/https?:\/\/\S+/g, '')            // URLs
+      .replace(/\|[^|]+\|/g, '')                 // table cells
+      .replace(/[-=]{3,}/g, '')                  // horizontal rules
+      .replace(/^\s*[-*+]\s/gm, '')              // list markers
+      .replace(/^\s*\d+\.\s/gm, '')              // numbered lists
+      .replace(/\n{2,}/g, '. ')
+      .replace(/\n/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+
+    if (!cleanText) return;
+
+    try {
+      const response = await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${this.elevenlabsVoiceId}/stream`,
+        {
+          method: 'POST',
+          headers: {
+            'xi-api-key': this.elevenlabsApiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            text: cleanText,
+            model_id: this.elevenlabsModel,
+            optimize_streaming_latency: 4,
+            output_format: 'mp3_44100_128',
+          })
+        }
+      );
+
+      if (!response.ok) {
+        if (response.status === 429) {
+          console.warn('ElevenLabs rate limit, falling back to browser TTS');
+          this.speakWithBrowserTts(text);
+          return;
+        }
+        throw new Error(`ElevenLabs error: ${response.status}`);
+      }
+
+      // Collect stream into blob
+      const reader = response.body.getReader();
+      const chunks = [];
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+
+      const blob = new Blob(chunks, { type: 'audio/mpeg' });
+      this.audioQueue.enqueue(blob);
+    } catch (error) {
+      console.error('ElevenLabs TTS error:', error);
+      // Fallback to browser TTS
+      this.speakWithBrowserTts(text);
+    }
+  }
+
+  speakWithBrowserTts(text) {
+    if (!text || !this.ttsSupported) {
+      this.onTtsDone();
+      return;
+    }
+
+    // Strip markdown for cleaner speech
+    const cleanText = text
+      .replace(/```[\s\S]*?```/g, ' code block ')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/\*([^*]+)\*/g, '$1')
+      .replace(/#+\s/g, '')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/\n{2,}/g, '. ')
+      .replace(/\n/g, ' ')
+      .trim();
+
+    if (!cleanText) {
+      this.onTtsDone();
+      return;
+    }
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    if (this.preferredVoice) utterance.voice = this.preferredVoice;
+    utterance.rate = 1.05;
+    utterance.pitch = 1.0;
+
+    utterance.onend = () => this.onTtsDone();
+    utterance.onerror = (e) => {
+      if (e.error !== 'interrupted' && e.error !== 'canceled') {
+        console.error('Browser TTS error in Talk Mode:', e.error);
+      }
+      this.onTtsDone();
+    };
+
+    speechSynthesis.cancel();
+    setTimeout(() => speechSynthesis.speak(utterance), 50);
+  }
+
+  onTtsDone() {
+    if (!this.talkModeActive) return;
+
+    if (this.autoListenAfterResponse && this.talkModeHandsfree) {
+      this.setTalkState('idle');
+      setTimeout(() => this.startTalkListening(), 300);
+    } else {
+      this.setTalkState('idle');
+    }
+  }
+
+  onAudioQueueEmpty() {
+    // Called when AudioQueue finishes playing all chunks
+    // Only proceed if we're done streaming AND still in speaking state
+    if (this.talkModeActive && this._talkStreamingComplete && this.talkModeState === 'speaking') {
+      // Small delay to ensure last audio chunk fully plays out
+      setTimeout(() => {
+        if (this.talkModeActive && this._talkStreamingComplete && this.talkModeState === 'speaking') {
+          console.log('[TalkMode] Audio queue empty, all done speaking');
+          this.onTtsDone();
+        }
+      }, 300);
+    }
+  }
+
+  updateTalkTranscript() {
+    const el = document.getElementById('talkModeTranscript');
+    if (!el) return;
+    const last5 = this._talkTranscriptEntries.slice(-5);
+    el.innerHTML = last5.map(e => {
+      const cls = e.role === 'user' ? 'talk-transcript-user' : 'talk-transcript-ai';
+      const label = e.role === 'user' ? 'You' : 'AI';
+      return `<div class="${cls}"><strong>${label}:</strong> ${this.escapeHtml(e.text)}</div>`;
+    }).join('');
+    el.scrollTop = el.scrollHeight;
+  }
+
+  // Audio visualization
+  startTalkVisualization() {
+    if (!this._talkCanvas) return;
+
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+      this._talkStream = stream;
+      this._talkAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const source = this._talkAudioCtx.createMediaStreamSource(stream);
+      this._talkAnalyser = this._talkAudioCtx.createAnalyser();
+      this._talkAnalyser.fftSize = 256;
+      source.connect(this._talkAnalyser);
+      this._talkDataArray = new Uint8Array(this._talkAnalyser.frequencyBinCount);
+      this._talkAnimating = true;
+      this.drawTalkVisualization();
+    }).catch(err => {
+      console.warn('Microphone access denied for visualization:', err);
+      // Visualization won't work but talk mode still functions
+    });
+  }
+
+  stopTalkVisualization() {
+    this._talkAnimating = false;
+    if (this._talkStream) {
+      this._talkStream.getTracks().forEach(t => t.stop());
+      this._talkStream = null;
+    }
+    if (this._talkAudioCtx) {
+      this._talkAudioCtx.close();
+      this._talkAudioCtx = null;
+    }
+  }
+
+  drawTalkVisualization() {
+    if (!this._talkAnimating || !this._talkAnalyser) return;
+    requestAnimationFrame(() => this.drawTalkVisualization());
+
+    const canvas = this._talkCanvas;
+    const ctx = this._talkCtx;
+    const analyser = this._talkAnalyser;
+    const dataArray = this._talkDataArray;
+
+    analyser.getByteFrequencyData(dataArray);
+
+    const w = canvas.width;
+    const h = canvas.height;
+    const cx = w / 2;
+    const cy = h / 2;
+    const baseRadius = 60;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Draw radial waveform around orb
+    const bars = dataArray.length;
+    const step = (Math.PI * 2) / bars;
+
+    ctx.strokeStyle = this.talkModeState === 'speaking'
+      ? 'rgba(16, 163, 127, 0.6)'
+      : this.talkModeState === 'listening'
+        ? 'rgba(59, 130, 246, 0.6)'
+        : 'rgba(100, 100, 120, 0.3)';
+    ctx.lineWidth = 2;
+
+    ctx.beginPath();
+    for (let i = 0; i < bars; i++) {
+      const angle = i * step - Math.PI / 2;
+      const amplitude = dataArray[i] / 255;
+      const r = baseRadius + amplitude * 50;
+      const x = cx + Math.cos(angle) * r;
+      const y = cy + Math.sin(angle) * r;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.stroke();
+
+    // Inner glow circle
+    const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+    const glowRadius = baseRadius + (avg / 255) * 15;
+    const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowRadius);
+    gradient.addColorStop(0, this.talkModeState === 'speaking'
+      ? 'rgba(16, 163, 127, 0.15)'
+      : this.talkModeState === 'listening'
+        ? 'rgba(59, 130, 246, 0.15)'
+        : 'rgba(100, 100, 120, 0.05)');
+    gradient.addColorStop(1, 'transparent');
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(cx, cy, glowRadius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // --- Workspace Panel ---
+
+  async loadWorkspaceFiles() {
+    if (!this.connected) {
+      this.showToast('Not connected to gateway');
+      return;
+    }
+
+    const workspacePath = this.elements.workspacePath.value.trim() || '~/.openclaw/workspace';
+
+    try {
+      // Use find to list all files and directories
+      const result = await this.request('exec.run', {
+        command: `find "${workspacePath}" -maxdepth 3 \\( -type f -o -type d \\) | head -100`,
+        shell: '/bin/bash'
+      });
+
+      if (result && result.stdout) {
+        const lines = result.stdout.trim().split('\n').filter(l => l.trim());
+        this.workspaceFileTree = this.buildFileTree(lines, workspacePath);
+        this.renderWorkspaceTree();
+      } else {
+        this.showWorkspaceEmpty('No files found');
+      }
+    } catch (error) {
+      console.error('Failed to load workspace files:', error);
+      this.showWorkspaceEmpty('Failed to load workspace: ' + error.message);
+    }
+  }
+
+  buildFileTree(paths, basePath) {
+    const tree = {};
+    const pathSet = new Set(paths);
+
+    // Normalize base path
+    const normalizedBase = basePath.replace(/\/$/, '');
+
+    for (const path of paths) {
+      if (!path || path === normalizedBase) continue;
+
+      let relativePath = path;
+      if (path.startsWith(normalizedBase + '/')) {
+        relativePath = path.substring(normalizedBase.length + 1);
+      }
+
+      const parts = relativePath.split('/').filter(p => p);
+      let current = tree;
+      let currentPath = normalizedBase;
+
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        currentPath = currentPath + '/' + part;
+        const isLastPart = i === parts.length - 1;
+
+        // Check if this path exists as a directory by seeing if any paths start with it
+        const isDirectory = !isLastPart || [...pathSet].some(p => p.startsWith(currentPath + '/'));
+
+        if (!current[part]) {
+          current[part] = {
+            name: part,
+            fullPath: currentPath,
+            isDirectory: isDirectory,
+            children: {}
+          };
+        }
+        current = current[part].children;
+      }
+    }
+
+    return tree;
+  }
+
+  renderWorkspaceTree() {
+    const tree = this.elements.workspaceTree;
+    tree.innerHTML = '';
+
+    if (Object.keys(this.workspaceFileTree).length === 0) {
+      this.showWorkspaceEmpty('No files found');
+      return;
+    }
+
+    const renderNode = (node, container, level = 0) => {
+      const item = document.createElement('div');
+      item.className = 'workspace-tree-item';
+      item.style.paddingLeft = (level * 16) + 'px';
+
+      if (node.isDirectory) {
+        const expanded = this.workspaceExpandedDirs && this.workspaceExpandedDirs.has(node.fullPath);
+
+        item.innerHTML = `
+          <svg class="workspace-tree-icon workspace-tree-folder-icon ${expanded ? 'expanded' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9 6 15 12 9 18"/>
+          </svg>
+          <svg class="workspace-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+          <span class="workspace-tree-label">${node.name}</span>
+        `;
+
+        item.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.toggleWorkspaceFolder(node.fullPath);
+        });
+
+        container.appendChild(item);
+
+        if (expanded && Object.keys(node.children).length > 0) {
+          const childContainer = document.createElement('div');
+          childContainer.className = 'workspace-tree-children';
+          for (const childName in node.children) {
+            renderNode(node.children[childName], childContainer, level + 1);
+          }
+          container.appendChild(childContainer);
+        }
+      } else {
+        const ext = node.name.split('.').pop().toLowerCase();
+        const icon = this.getFileIcon(ext);
+
+        item.innerHTML = `
+          <svg class="workspace-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            ${icon}
+          </svg>
+          <span class="workspace-tree-label">${node.name}</span>
+        `;
+
+        item.draggable = true;
+        item.addEventListener('dragstart', (e) => {
+          e.dataTransfer.setData('text/plain', `File: ${node.fullPath}`);
+          e.dataTransfer.effectAllowed = 'copy';
+        });
+
+        item.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.openWorkspaceFile(node.fullPath);
+        });
+
+        container.appendChild(item);
+      }
+    };
+
+    for (const nodeName in this.workspaceFileTree) {
+      renderNode(this.workspaceFileTree[nodeName], tree, 0);
+    }
+  }
+
+  getFileIcon(ext) {
+    // Return SVG path for file icon based on extension
+    switch (ext) {
+      case 'js':
+      case 'ts':
+      case 'jsx':
+      case 'tsx':
+        return '<rect x="4" y="2" width="16" height="20" rx="2"/><text x="12" y="14" text-anchor="middle" font-size="8" fill="currentColor">JS</text>';
+      case 'py':
+        return '<rect x="4" y="2" width="16" height="20" rx="2"/><text x="12" y="14" text-anchor="middle" font-size="8" fill="currentColor">PY</text>';
+      case 'md':
+        return '<rect x="4" y="2" width="16" height="20" rx="2"/><text x="12" y="14" text-anchor="middle" font-size="8" fill="currentColor">MD</text>';
+      case 'json':
+        return '<rect x="4" y="2" width="16" height="20" rx="2"/><text x="12" y="14" text-anchor="middle" font-size="7" fill="currentColor">JSON</text>';
+      default:
+        return '<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/>';
+    }
+  }
+
+  toggleWorkspaceFolder(path) {
+    if (!this.workspaceExpandedDirs) {
+      this.workspaceExpandedDirs = new Set();
+    }
+
+    if (this.workspaceExpandedDirs.has(path)) {
+      this.workspaceExpandedDirs.delete(path);
+    } else {
+      this.workspaceExpandedDirs.add(path);
+    }
+
+    // Save to localStorage
+    localStorage.setItem('clawgpt-workspace-expanded', JSON.stringify([...this.workspaceExpandedDirs]));
+
+    this.renderWorkspaceTree();
+  }
+
+  async openWorkspaceFile(filePath) {
+    if (!this.connected) {
+      this.showToast('Not connected to gateway');
+      return;
+    }
+
+    try {
+      const result = await this.request('exec.run', {
+        command: `cat "${filePath}"`,
+        shell: '/bin/bash'
+      });
+
+      if (result && result.stdout !== undefined) {
+        this.currentWorkspaceFile = filePath;
+        this.currentWorkspaceContent = result.stdout;
+
+        // Show viewer
+        this.elements.workspaceViewer.style.display = 'flex';
+        this.elements.workspaceViewerFilename.textContent = filePath.split('/').pop();
+
+        // Syntax highlighting
+        const ext = filePath.split('.').pop().toLowerCase();
+        const language = this.getLanguageFromExtension(ext);
+        const code = this.elements.workspaceViewerCode;
+        code.textContent = result.stdout;
+        code.className = `language-${language}`;
+
+        // Apply Prism highlighting
+        if (window.Prism) {
+          Prism.highlightElement(code);
+        }
+
+        // Hide tree temporarily to show viewer
+        this.elements.workspaceTree.style.display = 'none';
+      }
+    } catch (error) {
+      console.error('Failed to read file:', error);
+      this.showToast('Failed to read file: ' + error.message);
+    }
+  }
+
+  getLanguageFromExtension(ext) {
+    const map = {
+      'js': 'javascript',
+      'jsx': 'jsx',
+      'ts': 'typescript',
+      'tsx': 'tsx',
+      'py': 'python',
+      'rb': 'ruby',
+      'go': 'go',
+      'rs': 'rust',
+      'java': 'java',
+      'c': 'c',
+      'cpp': 'cpp',
+      'cs': 'csharp',
+      'php': 'php',
+      'html': 'html',
+      'css': 'css',
+      'scss': 'scss',
+      'json': 'json',
+      'xml': 'xml',
+      'yaml': 'yaml',
+      'yml': 'yaml',
+      'md': 'markdown',
+      'sh': 'bash',
+      'bash': 'bash',
+      'sql': 'sql'
+    };
+    return map[ext] || 'plaintext';
+  }
+
+  closeWorkspaceViewer() {
+    this.elements.workspaceViewer.style.display = 'none';
+    this.elements.workspaceTree.style.display = 'block';
+    this.currentWorkspaceFile = null;
+    this.currentWorkspaceContent = null;
+
+    // Close editor if open
+    if (this.elements.workspaceEditor.style.display !== 'none') {
+      this.cancelWorkspaceEdit();
+    }
+  }
+
+  openWorkspaceEditor() {
+    if (!this.currentWorkspaceFile) return;
+
+    // Show editor, hide viewer content
+    this.elements.workspaceViewerContent.style.display = 'none';
+    this.elements.workspaceEditor.style.display = 'flex';
+    this.elements.workspaceEditorTextarea.value = this.currentWorkspaceContent;
+    this.elements.workspaceEditorTextarea.focus();
+  }
+
+  cancelWorkspaceEdit() {
+    this.elements.workspaceViewerContent.style.display = 'block';
+    this.elements.workspaceEditor.style.display = 'none';
+  }
+
+  async saveWorkspaceFile() {
+    if (!this.connected || !this.currentWorkspaceFile) return;
+
+    const newContent = this.elements.workspaceEditorTextarea.value;
+
+    try {
+      // Escape content for heredoc
+      const escapedContent = newContent.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
+      const result = await this.request('exec.run', {
+        command: `cat > "${this.currentWorkspaceFile}" << 'CLAWGPT_EOF'\n${newContent}\nCLAWGPT_EOF`,
+        shell: '/bin/bash'
+      });
+
+      this.showToast('File saved successfully');
+      this.currentWorkspaceContent = newContent;
+
+      // Update viewer
+      const code = this.elements.workspaceViewerCode;
+      code.textContent = newContent;
+      if (window.Prism) {
+        Prism.highlightElement(code);
+      }
+
+      // Close editor
+      this.cancelWorkspaceEdit();
+    } catch (error) {
+      console.error('Failed to save file:', error);
+      this.showToast('Failed to save file: ' + error.message);
+    }
+  }
+
+  showWorkspaceEmpty(message) {
+    this.elements.workspaceTree.innerHTML = `
+      <div class="workspace-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+        </svg>
+        <p>${message}</p>
+        <p class="workspace-empty-hint">Click refresh to load workspace files</p>
+      </div>
+    `;
+  }
 }
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
   window.clawgpt = new ClawGPT();
+  window.app = window.clawgpt; // Expose for inline event handlers
 });

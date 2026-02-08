@@ -1,0 +1,21 @@
+{"level":"info","ts":1770419635.150334,"msg":"using provided configuration","config_file":"Caddyfile","config_adapter":""}
+{"level":"warn","ts":1770419635.1527567,"msg":"Caddyfile input is not formatted; run the 'caddy fmt' command to fix inconsistencies","adapter":"caddyfile","file":"Caddyfile","line":2}
+{"level":"info","ts":1770419635.155943,"logger":"admin","msg":"admin endpoint started","address":"localhost:2019","enforce_origin":false,"origins":["//[::1]:2019","//127.0.0.1:2019","//localhost:2019"]}
+{"level":"warn","ts":1770419635.1580048,"logger":"http","msg":"automatic HTTPS is completely disabled for server","server_name":"srv0"}
+{"level":"info","ts":1770419635.1601362,"logger":"tls.cache.maintenance","msg":"started background certificate maintenance","cache":"0xc0002c4000"}
+{"level":"warn","ts":1770419635.1962419,"logger":"pki.ca.local","msg":"installing root certificate (you might be prompted for password)","path":"storage:pki/authorities/local/root.crt"}
+{"level":"info","ts":1770419635.1964111,"msg":"not NSS security databases found"}
+{"level":"info","ts":1770419635.1964192,"msg":"define JAVA_HOME environment variable to use the Java trust"}
+{"level":"error","ts":1770419635.1964617,"logger":"pki.ca.local","msg":"failed to install root certificate","error":"install is not supported on this system","certificate_file":"storage:pki/authorities/local/root.crt"}
+{"level":"info","ts":1770419635.1968424,"logger":"http","msg":"enabling HTTP/3 listener","addr":":8443"}
+{"level":"info","ts":1770419635.1971219,"msg":"failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 2048 kiB, got: 416 kiB). See https://github.com/lucas-clemente/quic-go/wiki/UDP-Receive-Buffer-Size for details."}
+{"level":"info","ts":1770419635.1972246,"logger":"tls","msg":"cleaning storage unit","description":"FileStorage:/home/hsatarian/.local/share/caddy"}
+{"level":"info","ts":1770419635.1973274,"logger":"http.log","msg":"server running","name":"srv0","protocols":["h1","h2","h3"]}
+{"level":"info","ts":1770419635.19736,"logger":"tls","msg":"finished cleaning storage units"}
+{"level":"info","ts":1770419635.1976075,"msg":"autosaved config (load with --resume flag)","file":"/home/hsatarian/.config/caddy/autosave.json"}
+{"level":"info","ts":1770419635.1976428,"msg":"serving initial configuration"}
+{"level":"info","ts":1770419766.457151,"msg":"shutting down apps, then terminating","signal":"SIGTERM"}
+{"level":"warn","ts":1770419766.4572637,"msg":"exiting; byeee!! 👋","signal":"SIGTERM"}
+{"level":"info","ts":1770419766.4580648,"logger":"tls.cache.maintenance","msg":"stopped background certificate maintenance","cache":"0xc0002c4000"}
+{"level":"info","ts":1770419766.4582632,"logger":"admin","msg":"stopped previous server","address":"localhost:2019"}
+{"level":"info","ts":1770419766.4582868,"msg":"shutdown complete","signal":"SIGTERM","exit_code":0}

@@ -9,6 +9,7 @@
     style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com;
     connect-src *;
     img-src 'self' data: blob:;
+    media-src blob:;
     font-src 'self' data:;
   ">
   <title>ClawGPT</title>
@@ -57,6 +58,22 @@
         <!-- Chat history items go here -->
       </div>
       <div class="sidebar-footer">
+        <button class="sessions-btn" id="sessionsBtn" title="View all sessions">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+          </svg>
+          <span class="btn-text">Sessions</span>
+        </button>
+        <button class="cron-btn" id="cronBtn" title="Manage scheduled jobs">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+          <span class="btn-text">Cron Jobs</span>
+        </button>
         <button class="settings-btn" id="settingsBtn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="3"></circle>
@@ -81,6 +98,130 @@
       </div>
     </aside>
 
+    <!-- Session Dashboard Overlay -->
+    <div class="session-dashboard" id="sessionDashboard" style="display: none;">
+      <div class="session-dashboard-header">
+        <h2>Sessions</h2>
+        <button class="session-dashboard-close" id="sessionDashboardClose">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="session-dashboard-body" id="sessionDashboardBody">
+        <!-- Session cards will be rendered here -->
+      </div>
+    </div>
+
+    <!-- Cron Dashboard Overlay -->
+    <div class="cron-dashboard" id="cronDashboard" style="display: none;">
+      <div class="cron-dashboard-header">
+        <h2>Cron Jobs</h2>
+        <button class="cron-dashboard-close" id="cronDashboardClose">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="cron-dashboard-body" id="cronDashboardBody">
+        <!-- Cron job list will be rendered here -->
+      </div>
+      <div class="cron-dashboard-footer">
+        <button class="cron-create-btn" id="cronCreateBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>Create Job</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Cron Job Create/Edit Modal -->
+    <div class="cron-modal" id="cronModal" style="display: none;">
+      <div class="cron-modal-content">
+        <div class="cron-modal-header">
+          <h3 id="cronModalTitle">Create Cron Job</h3>
+          <button class="cron-modal-close" id="cronModalClose">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <form class="cron-form" id="cronForm">
+          <div class="cron-form-group">
+            <label for="cronJobName">Job Name</label>
+            <input type="text" id="cronJobName" placeholder="e.g., Daily reminder" required>
+          </div>
+
+          <div class="cron-form-group">
+            <label for="cronScheduleType">Schedule Type</label>
+            <select id="cronScheduleType" required>
+              <option value="cron">Cron Expression</option>
+              <option value="every">Recurring Interval</option>
+              <option value="at">One-Shot</option>
+            </select>
+          </div>
+
+          <div class="cron-form-group" id="cronExprGroup">
+            <label for="cronExpr">Cron Expression</label>
+            <input type="text" id="cronExpr" placeholder="e.g., 0 9 * * 1 (Mondays at 9am)">
+            <small>Format: minute hour day month weekday</small>
+          </div>
+
+          <div class="cron-form-group" id="cronTimezoneGroup">
+            <label for="cronTimezone">Timezone</label>
+            <input type="text" id="cronTimezone" placeholder="e.g., America/New_York" value="UTC">
+          </div>
+
+          <div class="cron-form-group" id="cronIntervalGroup" style="display: none;">
+            <label for="cronInterval">Interval (milliseconds)</label>
+            <input type="number" id="cronInterval" placeholder="e.g., 900000 (15 minutes)" min="1000">
+            <small>1 minute = 60000ms, 1 hour = 3600000ms</small>
+          </div>
+
+          <div class="cron-form-group" id="cronAtGroup" style="display: none;">
+            <label for="cronAt">Date & Time (ISO 8601)</label>
+            <input type="datetime-local" id="cronAt">
+            <small>One-time execution at specified time</small>
+          </div>
+
+          <div class="cron-form-group">
+            <label for="cronPayloadType">Payload Type</label>
+            <select id="cronPayloadType" required>
+              <option value="systemEvent">System Event</option>
+              <option value="agentTurn">Agent Turn</option>
+            </select>
+          </div>
+
+          <div class="cron-form-group">
+            <label for="cronMessage" id="cronMessageLabel">Message</label>
+            <textarea id="cronMessage" placeholder="Enter message text..." rows="3" required></textarea>
+          </div>
+
+          <div class="cron-form-group">
+            <label for="cronSessionTarget">Session Target</label>
+            <input type="text" id="cronSessionTarget" placeholder="e.g., main" value="main" required>
+          </div>
+
+          <div class="cron-form-group">
+            <label class="cron-checkbox">
+              <input type="checkbox" id="cronEnabled" checked>
+              <span>Enabled</span>
+            </label>
+          </div>
+
+          <div class="cron-form-actions">
+            <button type="button" class="cron-btn-cancel" id="cronFormCancel">Cancel</button>
+            <button type="submit" class="cron-btn-submit">Save Job</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- Main chat area -->
     <main class="main">
       <header class="header">
@@ -96,6 +237,23 @@
           <div class="chat-model" id="chatModel" title="Current model"></div>
           <div class="chat-tokens" id="chatTokens" title="Estimated tokens in this conversation"></div>
         </div>
+        <button class="intelligence-btn" id="intelligenceBtn" title="Extract & Share conversation intelligence" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2L9 9H2l6 4.5L5.5 21 12 16l6.5 5L16 13.5 22 9h-7z"/>
+          </svg>
+        </button>
+        <button class="artifacts-btn" id="artifactsBtn" title="View generated code, HTML, diagrams" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="16 18 22 12 16 6"></polyline>
+            <polyline points="8 6 2 12 8 18"></polyline>
+          </svg>
+          <span class="artifacts-badge" id="artifactsBadge" style="display:none;">0</span>
+        </button>
+        <button class="workspace-btn" id="workspaceBtn" title="Browse & edit workspace files">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+        </button>
         <div class="status" id="status">Disconnected</div>
       </header>
 
@@ -105,6 +263,12 @@
           <p>A familiar UI for OpenClaw with extra features</p>
         </div>
       </div>
+
+      <button class="scroll-to-bottom-btn" id="scrollToBottomBtn" style="display: none;" title="Scroll to bottom">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 5v14M19 12l-7 7-7-7"/>
+        </svg>
+      </button>
 
       <div class="input-area">
         <div class="image-preview" id="imagePreview"></div>
@@ -128,6 +292,13 @@
               <line x1="8" y1="23" x2="16" y2="23"></line>
             </svg>
           </button>
+          <button class="talk-mode-btn" id="talkModeBtn" title="Talk Mode — voice conversation">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <circle cx="12" cy="12" r="10" stroke-dasharray="4 4"/>
+            </svg>
+          </button>
           <button class="send-btn" id="sendBtn" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -143,6 +314,197 @@
         <p class="disclaimer">ClawGPT connects to your local OpenClaw gateway</p>
       </div>
     </main>
+
+    <!-- Right Panel (Intelligence + Artifacts) -->
+    <aside class="right-panel" id="rightPanel">
+      <div class="right-panel-resize-handle" id="rightPanelResizeHandle"></div>
+
+      <!-- Panel Tabs -->
+      <div class="right-panel-tabs">
+        <button class="right-panel-tab" id="intelligenceTab" data-panel="intelligence">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <path d="M12 2L9 9H2l6 4.5L5.5 21 12 16l6.5 5L16 13.5 22 9h-7z"/>
+          </svg>
+          <span>Intelligence</span>
+        </button>
+        <button class="right-panel-tab" id="artifactsTab" data-panel="artifacts">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <polyline points="16 18 22 12 16 6"></polyline>
+            <polyline points="8 6 2 12 8 18"></polyline>
+          </svg>
+          <span>Artifacts</span>
+          <span class="tab-badge" id="artifactsTabBadge" style="display:none;">0</span>
+        </button>
+        <button class="right-panel-tab" id="workspaceTab" data-panel="workspace">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+          <span>Workspace</span>
+        </button>
+        <button class="right-panel-close-btn" id="rightPanelCloseBtn" title="Close panel">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Intelligence Panel Content -->
+      <div class="panel-content" id="intelligencePanel" style="display:none;">
+        <div class="intelligence-panel-header">
+          <h2>Conversation Intelligence</h2>
+        </div>
+      <div class="intelligence-panel-body" id="intelligencePanelBody">
+        <!-- Controls section -->
+        <div class="intelligence-controls">
+          <div class="intelligence-prompt-row">
+            <select class="intelligence-prompt-select" id="intelligencePromptSelect">
+              <option value="default">Default prompt</option>
+            </select>
+            <button class="intelligence-prompt-view-btn" id="intelligencePromptViewBtn" title="View/edit prompt">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="intelligence-prompt-editor" id="intelligencePromptEditor" style="display:none">
+            <textarea class="intelligence-prompt-textarea" id="intelligencePromptTextarea" rows="8" placeholder="Enter extraction prompt..."></textarea>
+            <div class="intelligence-prompt-editor-actions">
+              <input type="text" class="intelligence-prompt-name-input" id="intelligencePromptName" placeholder="Prompt name (to save as custom)">
+              <button class="intelligence-prompt-save-btn" id="intelligencePromptSaveBtn">Save</button>
+              <button class="intelligence-prompt-cancel-btn" id="intelligencePromptCancelBtn">Cancel</button>
+            </div>
+          </div>
+          <div class="intelligence-info" id="intelligenceInfo">claude-sonnet-4-5-20250514 • 0 messages</div>
+          <div class="intelligence-generate-row">
+            <button class="intelligence-generate-btn" id="intelligenceGenerateBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <path d="M12 2L9 9H2l6 4.5L5.5 21 12 16l6.5 5L16 13.5 22 9h-7z"/>
+              </svg>
+              Generate
+            </button>
+            <div class="intelligence-version-controls" id="intelligenceVersionControls" style="display:none">
+              <select class="intelligence-version-select" id="intelligenceVersionSelect" title="Version history"></select>
+              <label class="intelligence-replace-label" title="Overwrite latest version instead of creating new">
+                <input type="checkbox" id="intelligenceReplaceCheck"> Replace
+              </label>
+            </div>
+          </div>
+        </div>
+        <!-- Results section -->
+        <div class="intelligence-results" id="intelligenceResults">
+          <div class="intelligence-empty">
+            <p>Click <strong>Generate</strong> to analyze this conversation with AI.</p>
+          </div>
+        </div>
+        <!-- Download all bar -->
+        <div class="intelligence-footer" id="intelligenceFooter" style="display:none">
+          <button class="intelligence-download-all-btn" id="intelligenceDownloadAllBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Download All
+          </button>
+        </div>
+      </div>
+      </div>
+
+      <!-- Artifacts Panel Content -->
+      <div class="panel-content" id="artifactsPanel" style="display:none;">
+        <div class="artifacts-panel-header">
+          <h2>Artifacts</h2>
+        </div>
+        <div class="artifacts-panel-body" id="artifactsPanelBody">
+          <div class="artifacts-list" id="artifactsList">
+            <div class="artifacts-empty">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48">
+                <polyline points="16 18 22 12 16 6"></polyline>
+                <polyline points="8 6 2 12 8 18"></polyline>
+              </svg>
+              <p>No artifacts yet</p>
+              <p class="artifacts-empty-hint">Code, HTML, SVG, and diagrams will appear here</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Workspace Panel Content -->
+      <div class="panel-content" id="workspacePanel" style="display:none;">
+        <div class="workspace-panel-header">
+          <h2>Workspace</h2>
+          <button class="workspace-refresh-btn" id="workspaceRefreshBtn" title="Refresh workspace">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <polyline points="23 4 23 10 17 10"/>
+              <polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+          </button>
+        </div>
+        <div class="workspace-panel-body" id="workspacePanelBody">
+          <div class="workspace-path-bar">
+            <input type="text" id="workspacePath" class="workspace-path-input" placeholder="~/.openclaw/workspace" value="~/.openclaw/workspace">
+          </div>
+          <div class="workspace-tree" id="workspaceTree">
+            <div class="workspace-empty">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+              </svg>
+              <p>No workspace files</p>
+              <p class="workspace-empty-hint">Click refresh to load workspace files</p>
+            </div>
+          </div>
+          <div class="workspace-viewer" id="workspaceViewer" style="display:none;">
+            <div class="workspace-viewer-header">
+              <span class="workspace-viewer-filename" id="workspaceViewerFilename"></span>
+              <div class="workspace-viewer-actions">
+                <button class="workspace-viewer-edit-btn" id="workspaceViewerEditBtn" title="Edit file">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </button>
+                <button class="workspace-viewer-close-btn" id="workspaceViewerCloseBtn" title="Close file">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="workspace-viewer-content" id="workspaceViewerContent">
+              <pre><code id="workspaceViewerCode"></code></pre>
+            </div>
+            <div class="workspace-editor" id="workspaceEditor" style="display:none;">
+              <textarea id="workspaceEditorTextarea"></textarea>
+              <div class="workspace-editor-actions">
+                <button class="workspace-editor-save-btn" id="workspaceEditorSaveBtn">Save</button>
+                <button class="workspace-editor-cancel-btn" id="workspaceEditorCancelBtn">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Talk Mode Overlay -->
+  <div class="talk-mode-overlay" id="talkModeOverlay">
+    <button class="talk-mode-close" id="talkModeClose" title="Exit Talk Mode">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <div class="talk-mode-center">
+      <canvas id="talkModeCanvas" width="300" height="300"></canvas>
+      <div class="talk-mode-orb" id="talkModeOrb"></div>
+    </div>
+    <div class="talk-mode-status" id="talkModeStatus">Tap to start</div>
+    <div class="talk-mode-mode-toggle">
+      <button class="talk-mode-mode-btn active" id="talkModeHandsfree" title="Hands-free">Hands-free</button>
+      <button class="talk-mode-mode-btn" id="talkModePTT" title="Push to talk">Push-to-talk</button>
+    </div>
+    <div class="talk-mode-transcript" id="talkModeTranscript"></div>
   </div>
 
   <!-- Search Modal -->
@@ -228,6 +590,64 @@
             Show Message Tokens
           </label>
           <span class="setting-hint">Display estimated token count per message</span>
+        </div>
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="desktopNotifications">
+            Desktop Notifications
+          </label>
+          <span class="setting-hint">Show notification when assistant replies (only when tab is not focused)</span>
+        </div>
+        <div class="settings-divider"></div>
+        <div class="settings-section-title">Voice / Talk Mode</div>
+        <div class="form-group">
+          <label for="ttsProvider">TTS Provider</label>
+          <select id="ttsProvider">
+            <option value="browser">Browser (free)</option>
+            <option value="elevenlabs">ElevenLabs</option>
+          </select>
+        </div>
+        <div id="elevenlabsSettings" class="voice-subsettings" style="display:none;">
+          <div class="form-group">
+            <label for="elevenlabsApiKey">ElevenLabs API Key</label>
+            <input type="password" id="elevenlabsApiKey" placeholder="Enter your ElevenLabs API key">
+          </div>
+          <div class="form-group">
+            <label for="elevenlabsVoice">Voice</label>
+            <select id="elevenlabsVoice">
+              <option value="JBFqnCBsd6RMkjVDRZzb">George</option>
+            </select>
+            <button class="data-btn" id="refreshVoicesBtn" style="margin-top:6px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                <polyline points="23 4 23 10 17 10"/>
+                <polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+              Refresh Voices
+            </button>
+          </div>
+          <div class="form-group">
+            <label for="elevenlabsModel">TTS Model</label>
+            <select id="elevenlabsModel">
+              <option value="eleven_turbo_v2_5">Turbo v2.5 (fastest)</option>
+              <option value="eleven_turbo_v2">Turbo v2</option>
+              <option value="eleven_monolingual_v1">Monolingual v1</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="streamingTts" checked>
+              Streaming TTS
+            </label>
+            <span class="setting-hint">Stream tokens to TTS as they arrive for faster first audio</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="autoListenAfterResponse" checked>
+            Auto-listen after response
+          </label>
+          <span class="setting-hint">Restart microphone after AI finishes speaking</span>
         </div>
         <div class="settings-divider"></div>
         <div class="settings-section-title">Data</div>
@@ -378,6 +798,37 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Context Menu for Chat Items -->
+  <div class="chat-context-menu" id="chatContextMenu">
+    <button class="chat-context-menu-item" data-action="rename">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>
+      Rename
+    </button>
+    <button class="chat-context-menu-item" data-action="regenerate-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+      </svg>
+      Regenerate Title
+    </button>
+    <button class="chat-context-menu-item" data-action="pin">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="17" x2="12" y2="22"/>
+        <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/>
+      </svg>
+      <span class="pin-text">Pin</span>
+    </button>
+    <button class="chat-context-menu-item danger" data-action="delete">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3 6 5 6 21 6"/>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+      </svg>
+      Delete
+    </button>
   </div>
 
   <!-- Shortcuts Modal -->
@@ -594,6 +1045,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU" crossorigin="anonymous"></script>
   <!-- Prism.js core + autoloader for syntax highlighting -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" integrity="sha384-06z5D//U/xpvxZHuUz92xBvq3DqBBFi7Up53HRrbV7Jlv7Yvh/MZ7oenfUe9iCEt" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js" integrity="sha384-Uq05+JLko69eOiPr39ta9bh7kld5PKZoU+fF7g0EXTAriEollhZ+DrN8Q/Oi8J2Q" crossorigin="anonymous"></script>
   <!-- Optional: config.js for default settings (gitignored) -->
   <!-- E2E Encryption for Relay -->
