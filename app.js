@@ -6808,6 +6808,13 @@ Example: [0, 2, 5]`;
     }
   }
 
+  getFileUrl(filePath) {
+    if (filePath && filePath.startsWith('/')) {
+      return `/api/file?path=${encodeURIComponent(filePath)}`;
+    }
+    return filePath;
+  }
+
   renderFileAttachments(attachments) {
     if (!attachments || attachments.length === 0) return '';
 
@@ -6818,7 +6825,7 @@ Example: [0, 2, 5]`;
       // For images, render inline preview
       if (file.type === 'image') {
         return `<div class="attachment-image" data-attachment-idx="${idx}">
-          <img src="${this.escapeHtml(file.path)}" alt="${this.escapeHtml(file.name)}"
+          <img src="${this.escapeHtml(this.getFileUrl(file.path))}" alt="${this.escapeHtml(file.name)}"
                class="attachment-img clickable-attachment-img"
                onerror="this.parentElement.innerHTML='<div class=\\'attachment-card\\'><div class=\\'attachment-icon\\'>${icon}</div><div class=\\'attachment-info\\'><div class=\\'attachment-name\\'>${this.escapeHtml(file.name)}</div>${sizeText ? `<div class=\\'attachment-size\\'>${sizeText}</div>` : ''}</div><button class=\\'attachment-download-btn\\' title=\\'Download\\'>⬇</button></div>'">
         </div>`;
@@ -6833,7 +6840,7 @@ Example: [0, 2, 5]`;
             ${sizeText ? `<span class="attachment-size">${sizeText}</span>` : ''}
           </div>
           <audio controls class="attachment-audio-player">
-            <source src="${this.escapeHtml(file.path)}" type="${this.escapeHtml(file.mimeType || 'audio/mpeg')}">
+            <source src="${this.escapeHtml(this.getFileUrl(file.path))}" type="${this.escapeHtml(file.mimeType || 'audio/mpeg')}">
             Your browser does not support the audio element.
           </audio>
         </div>`;
@@ -6869,8 +6876,8 @@ Example: [0, 2, 5]`;
     const attachment = msg.attachments[attachmentIdx];
 
     try {
-      // Try to fetch the file
-      const response = await fetch(attachment.path);
+      // Try to fetch the file via server endpoint
+      const response = await fetch(this.getFileUrl(attachment.path));
       if (!response.ok) throw new Error('File not found');
 
       const blob = await response.blob();
@@ -9714,8 +9721,11 @@ If multiple files, return multiple objects in the array.`;
       const data = await res.json();
 
       if (data.files && data.files.length > 0) {
+        // API returns absolute paths — use the root dir entry as base for tree building
+        const rootEntry = data.files.find(f => f.type === 'dir');
+        const wsRoot = rootEntry ? rootEntry.path.replace(/\/$/, '') : workspacePath;
         const lines = data.files.map(f => f.path);
-        this.workspaceFileTree = this.buildFileTree(lines, workspacePath);
+        this.workspaceFileTree = this.buildFileTree(lines, wsRoot);
         this.renderWorkspaceTree();
       } else {
         this.showWorkspaceEmpty('No files found');
