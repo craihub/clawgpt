@@ -8,7 +8,7 @@
     script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com;
     style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com;
     connect-src *;
-    img-src 'self' data: blob:;
+    img-src 'self' data: blob: https:;
     media-src blob:;
     font-src 'self' data:;
   ">
@@ -640,6 +640,40 @@
         <button class="exec-btn exec-btn-edit" id="execEditBtn">Edit &amp; Approve</button>
         <button class="exec-btn exec-btn-approve" id="execApproveBtn">Approve</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Image Lightbox Overlay -->
+  <div class="lightbox-overlay" id="lightboxOverlay">
+    <button class="lightbox-close" id="lightboxClose" title="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </button>
+    <button class="lightbox-nav lightbox-prev" id="lightboxPrev" title="Previous">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="15 18 9 12 15 6"></polyline>
+      </svg>
+    </button>
+    <div class="lightbox-content">
+      <img class="lightbox-image" id="lightboxImage" src="" alt="">
+    </div>
+    <button class="lightbox-nav lightbox-next" id="lightboxNext" title="Next">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="9 6 15 12 9 18"></polyline>
+      </svg>
+    </button>
+    <div class="lightbox-footer">
+      <span class="lightbox-counter" id="lightboxCounter"></span>
+      <button class="lightbox-download" id="lightboxDownload" title="Download">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Download
+      </button>
     </div>
   </div>
 

@@ -2780,6 +2780,16 @@ window.CLAWGPT_CONFIG = {
     // Event listeners
     // Delegated click handlers (avoid inline onclick XSS)
     this.elements.messages.addEventListener('click', (e) => {
+      // Inline images and attachment images → open lightbox
+      const inlineImg = e.target.closest('.inline-image, .clickable-attachment-img');
+      if (inlineImg) {
+        e.preventDefault();
+        const allImgs = [...this.elements.messages.querySelectorAll('.inline-image, .clickable-attachment-img')];
+        const srcs = allImgs.map(el => el.dataset.lightboxSrc || el.src);
+        const idx = allImgs.indexOf(inlineImg);
+        this.openLightbox(srcs[idx >= 0 ? idx : 0], srcs, idx >= 0 ? idx : 0);
+        return;
+      }
       const img = e.target.closest('.clickable-img');
       if (img && img.src && img.src.startsWith('data:')) {
         window.open(img.src, '_blank');
@@ -2883,6 +2893,9 @@ window.CLAWGPT_CONFIG = {
 
     // Exec Approval
     this.initExecApproval();
+
+    // Image Lightbox
+    this.initLightbox();
 
     this.elements.settingsBtn.addEventListener('click', () => this.openSettings());
     this.elements.closeSettings.addEventListener('click', () => this.closeSettings());
@@ -6535,6 +6548,33 @@ Example: [0, 2, 5]`;
       return `__CODEBLOCK_${index}__`;
     });
 
+    // Detect and placeholder inline images before HTML escaping
+    const inlineImages = [];
+
+    // MEDIA:/path/to/image.png → inline image via getFileUrl
+    html = html.replace(/MEDIA:(\/[^\s\n]+\.(?:png|jpg|jpeg|gif|webp|svg|bmp))/gi, (match, path) => {
+      const idx = inlineImages.length;
+      const src = this.getFileUrl(path);
+      inlineImages.push({ src, alt: path.split('/').pop() });
+      return `__INLINEIMG_${idx}__`;
+    });
+
+    // Markdown image syntax ![alt](url)
+    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, url) => {
+      const idx = inlineImages.length;
+      // If url is a local absolute path, route through getFileUrl
+      const src = url.startsWith('/') ? this.getFileUrl(url) : url;
+      inlineImages.push({ src, alt: alt || url.split('/').pop() });
+      return `__INLINEIMG_${idx}__`;
+    });
+
+    // Base64 data URL images on their own line
+    html = html.replace(/(data:image\/[a-z+]+;base64,[A-Za-z0-9+/=]+)/g, (match, dataUrl) => {
+      const idx = inlineImages.length;
+      inlineImages.push({ src: dataUrl, alt: 'Generated image' });
+      return `__INLINEIMG_${idx}__`;
+    });
+
     // Now escape HTML for the rest
     html = this.escapeHtml(html);
 
@@ -6552,6 +6592,14 @@ Example: [0, 2, 5]`;
 
     // Line breaks
     html = html.replace(/\n/g, '<br>');
+
+    // Restore inline images
+    html = html.replace(/__INLINEIMG_(\d+)__/g, (match, index) => {
+      const img = inlineImages[parseInt(index)];
+      const escapedSrc = this.escapeHtml(img.src);
+      const escapedAlt = this.escapeHtml(img.alt);
+      return `<img class="inline-image" src="${escapedSrc}" alt="${escapedAlt}" data-lightbox-src="${escapedSrc}" loading="lazy">`;
+    });
 
     // Restore code blocks with proper formatting and copy button
     html = html.replace(/__CODEBLOCK_(\d+)__/g, (match, index) => {
@@ -6610,7 +6658,7 @@ Example: [0, 2, 5]`;
         ADD_TAGS: ['svg', 'rect', 'path', 'polygon', 'circle', 'line'],
         ADD_ATTR: ['viewBox', 'fill', 'stroke', 'stroke-width', 'd', 'x', 'y',
                    'width', 'height', 'rx', 'points', 'cx', 'cy', 'r', 'data-language',
-                   'data-tool-idx']
+                   'data-tool-idx', 'data-lightbox-src', 'loading']
       });
     }
     // DOMPurify not loaded — strip all HTML tags as fallback
@@ -7152,7 +7200,7 @@ Example: [0, 2, 5]`;
       if (file.type === 'image') {
         return `<div class="attachment-image" data-attachment-idx="${idx}">
           <img src="${this.escapeHtml(this.getFileUrl(file.path))}" alt="${this.escapeHtml(file.name)}"
-               class="attachment-img clickable-attachment-img"
+               class="attachment-img clickable-attachment-img" data-lightbox-src="${this.escapeHtml(this.getFileUrl(file.path))}"
                onerror="this.parentElement.innerHTML='<div class=\\'attachment-card\\'><div class=\\'attachment-icon\\'>${icon}</div><div class=\\'attachment-info\\'><div class=\\'attachment-name\\'>${this.escapeHtml(file.name)}</div>${sizeText ? `<div class=\\'attachment-size\\'>${sizeText}</div>` : ''}</div><button class=\\'attachment-download-btn\\' title=\\'Download\\'>⬇</button></div>'">
         </div>`;
       }
@@ -8503,11 +8551,14 @@ If multiple files, return multiple objects in the array.`;
 
     const artifacts = chat.artifacts || [];
     this.renderArtifacts(artifacts);
+    this.renderImageGallery();
   }
 
   updateArtifactsBadge() {
     const chat = this.chats[this.currentChatId];
-    const count = (chat && chat.artifacts) ? chat.artifacts.length : 0;
+    const artifactCount = (chat && chat.artifacts) ? chat.artifacts.length : 0;
+    const imageCount = this.extractImagesFromChat().length;
+    const count = artifactCount + imageCount;
 
     if (count > 0) {
       this.elements.artifactsBadge.textContent = count;
@@ -8822,6 +8873,183 @@ If multiple files, return multiple objects in the array.`;
     } catch (err) {
       container.innerHTML = `<p style="color: #ef4444; padding: 20px;">Error rendering diagram: ${err.message}</p>`;
     }
+  }
+
+  // --- Image Lightbox ---
+
+  initLightbox() {
+    this._lightboxImages = [];
+    this._lightboxIndex = 0;
+
+    const overlay = document.getElementById('lightboxOverlay');
+    const closeBtn = document.getElementById('lightboxClose');
+    const prevBtn = document.getElementById('lightboxPrev');
+    const nextBtn = document.getElementById('lightboxNext');
+    const downloadBtn = document.getElementById('lightboxDownload');
+
+    closeBtn.addEventListener('click', () => this.closeLightbox());
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay || e.target.classList.contains('lightbox-content')) {
+        this.closeLightbox();
+      }
+    });
+    prevBtn.addEventListener('click', (e) => { e.stopPropagation(); this.lightboxPrev(); });
+    nextBtn.addEventListener('click', (e) => { e.stopPropagation(); this.lightboxNext(); });
+    downloadBtn.addEventListener('click', (e) => { e.stopPropagation(); this.lightboxDownload(); });
+
+    document.addEventListener('keydown', (e) => {
+      if (!overlay.classList.contains('open')) return;
+      if (e.key === 'Escape') this.closeLightbox();
+      else if (e.key === 'ArrowLeft') this.lightboxPrev();
+      else if (e.key === 'ArrowRight') this.lightboxNext();
+    });
+  }
+
+  openLightbox(src, allImages, currentIndex) {
+    this._lightboxImages = allImages || [src];
+    this._lightboxIndex = currentIndex || 0;
+
+    const overlay = document.getElementById('lightboxOverlay');
+    overlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    this.updateLightboxImage();
+  }
+
+  closeLightbox() {
+    const overlay = document.getElementById('lightboxOverlay');
+    overlay.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  updateLightboxImage() {
+    const img = document.getElementById('lightboxImage');
+    const counter = document.getElementById('lightboxCounter');
+    const prevBtn = document.getElementById('lightboxPrev');
+    const nextBtn = document.getElementById('lightboxNext');
+
+    img.src = this._lightboxImages[this._lightboxIndex];
+    counter.textContent = this._lightboxImages.length > 1
+      ? `${this._lightboxIndex + 1} / ${this._lightboxImages.length}`
+      : '';
+    prevBtn.style.display = this._lightboxIndex > 0 ? '' : 'none';
+    nextBtn.style.display = this._lightboxIndex < this._lightboxImages.length - 1 ? '' : 'none';
+  }
+
+  lightboxPrev() {
+    if (this._lightboxIndex > 0) {
+      this._lightboxIndex--;
+      this.updateLightboxImage();
+    }
+  }
+
+  lightboxNext() {
+    if (this._lightboxIndex < this._lightboxImages.length - 1) {
+      this._lightboxIndex++;
+      this.updateLightboxImage();
+    }
+  }
+
+  lightboxDownload() {
+    const src = this._lightboxImages[this._lightboxIndex];
+    const a = document.createElement('a');
+    a.href = src;
+    a.download = src.split('/').pop() || 'image.png';
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  // --- Image Gallery for Artifacts Panel ---
+
+  extractImagesFromChat() {
+    const chat = this.chats[this.currentChatId];
+    if (!chat) return [];
+
+    const images = [];
+    const seen = new Set();
+
+    chat.messages.forEach(msg => {
+      if (!msg.content) return;
+
+      // MEDIA: paths
+      const mediaRe = /MEDIA:(\/[^\s\n]+\.(?:png|jpg|jpeg|gif|webp|svg|bmp))/gi;
+      let m;
+      while ((m = mediaRe.exec(msg.content)) !== null) {
+        const src = this.getFileUrl(m[1]);
+        if (!seen.has(src)) { seen.add(src); images.push({ src, alt: m[1].split('/').pop() }); }
+      }
+
+      // Markdown images
+      const mdRe = /!\[([^\]]*)\]\(([^)]+)\)/g;
+      while ((m = mdRe.exec(msg.content)) !== null) {
+        const src = m[2].startsWith('/') ? this.getFileUrl(m[2]) : m[2];
+        if (!seen.has(src)) { seen.add(src); images.push({ src, alt: m[1] || m[2].split('/').pop() }); }
+      }
+
+      // Base64 data URLs
+      const b64Re = /(data:image\/[a-z+]+;base64,[A-Za-z0-9+/=]+)/g;
+      while ((m = b64Re.exec(msg.content)) !== null) {
+        const src = m[1];
+        if (!seen.has(src)) { seen.add(src); images.push({ src, alt: 'Generated image' }); }
+      }
+
+      // File attachments with type=image
+      if (msg.attachments) {
+        msg.attachments.forEach(att => {
+          if (att.type === 'image' && att.path) {
+            const src = this.getFileUrl(att.path);
+            if (!seen.has(src)) { seen.add(src); images.push({ src, alt: att.name || att.path.split('/').pop() }); }
+          }
+        });
+      }
+    });
+
+    return images;
+  }
+
+  renderImageGallery() {
+    const images = this.extractImagesFromChat();
+    const container = this.elements.artifactsPanelBody;
+    const galleryEl = container.querySelector('.image-gallery-section');
+
+    // Remove old gallery if present
+    if (galleryEl) galleryEl.remove();
+
+    if (images.length === 0) return;
+
+    const section = document.createElement('div');
+    section.className = 'image-gallery-section';
+    section.innerHTML = `
+      <div class="image-gallery-header">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+          <circle cx="8.5" cy="8.5" r="1.5"/>
+          <polyline points="21 15 16 10 5 21"/>
+        </svg>
+        <span>Images</span>
+        <span class="image-gallery-count">${images.length}</span>
+      </div>
+      <div class="image-gallery">
+        ${images.map((img, i) => `
+          <div class="image-thumbnail" data-gallery-idx="${i}">
+            <img src="${this.escapeHtml(img.src)}" alt="${this.escapeHtml(img.alt)}" loading="lazy">
+          </div>
+        `).join('')}
+      </div>
+    `;
+
+    // Insert gallery before the artifacts list
+    container.insertBefore(section, container.firstChild);
+
+    // Attach click handlers for thumbnails
+    const allSrcs = images.map(img => img.src);
+    section.querySelectorAll('.image-thumbnail').forEach(thumb => {
+      thumb.addEventListener('click', () => {
+        const idx = parseInt(thumb.dataset.galleryIdx);
+        this.openLightbox(allSrcs[idx], allSrcs, idx);
+      });
+    });
   }
 
   // --- Prompt Management ---
