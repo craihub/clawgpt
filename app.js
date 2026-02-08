@@ -2731,8 +2731,24 @@ window.CLAWGPT_CONFIG = {
       promptLibraryVarsTitle: document.getElementById('promptLibraryVarsTitle'),
       promptLibraryVarsForm: document.getElementById('promptLibraryVarsForm'),
       promptVarsCancelBtn: document.getElementById('promptVarsCancelBtn'),
-      promptVarsInsertBtn: document.getElementById('promptVarsInsertBtn')
+      promptVarsInsertBtn: document.getElementById('promptVarsInsertBtn'),
+      execApprovalModal: document.getElementById('execApprovalModal'),
+      execApprovalClose: document.getElementById('execApprovalClose'),
+      execCommandText: document.getElementById('execCommandText'),
+      execWorkDir: document.getElementById('execWorkDir'),
+      execSessionKey: document.getElementById('execSessionKey'),
+      execEditArea: document.getElementById('execEditArea'),
+      execEditCommand: document.getElementById('execEditCommand'),
+      execCountdown: document.getElementById('execCountdown'),
+      execDenyBtn: document.getElementById('execDenyBtn'),
+      execEditBtn: document.getElementById('execEditBtn'),
+      execApproveBtn: document.getElementById('execApproveBtn')
     };
+
+    // Exec approval state
+    this.execApprovalPending = null;
+    this.execApprovalTimer = null;
+    this.execCountdownInterval = null;
 
     // Session dashboard state
     this.sessionDashboardOpen = false;
@@ -2864,6 +2880,9 @@ window.CLAWGPT_CONFIG = {
 
     // Prompt Library
     this.initPromptLibrary();
+
+    // Exec Approval
+    this.initExecApproval();
 
     this.elements.settingsBtn.addEventListener('click', () => this.openSettings());
     this.elements.closeSettings.addEventListener('click', () => this.closeSettings());
@@ -5099,6 +5118,12 @@ Example: [0, 2, 5]`;
       });
       return;
     }
+
+    // Handle exec approval requests
+    if (msg.type === 'event' && msg.event === 'exec.approval.requested') {
+      this.showExecApproval(msg.payload);
+      return;
+    }
   }
 
   async getOrCreateDeviceIdentity() {
@@ -5131,7 +5156,7 @@ Example: [0, 2, 5]`;
           mode: 'ui'
         },
         role: 'operator',
-        scopes: ['operator.read', 'operator.write', 'operator.admin'],
+        scopes: ['operator.read', 'operator.write', 'operator.admin', 'operator.approvals'],
         caps: [],
         commands: [],
         permissions: {},
@@ -10744,6 +10769,152 @@ If multiple files, return multiple objects in the array.`;
       else if (action === 'edit') this.showPromptForm(id);
       else if (action === 'delete') this.deletePrompt(id);
     };
+  }
+
+  // ── Exec Approval ──
+
+  initExecApproval() {
+    const el = this.elements;
+    if (!el.execApprovalModal) return;
+
+    el.execApprovalClose.addEventListener('click', () => this.denyExec());
+    el.execApprovalModal.addEventListener('click', (e) => {
+      if (e.target === el.execApprovalModal) this.denyExec();
+    });
+    el.execDenyBtn.addEventListener('click', () => this.denyExec());
+    el.execApproveBtn.addEventListener('click', () => this.approveExec());
+    el.execEditBtn.addEventListener('click', () => this.editAndApproveExec());
+  }
+
+  showExecApproval(payload) {
+    const el = this.elements;
+    if (!el.execApprovalModal) return;
+
+    // Store pending approval
+    this.execApprovalPending = payload;
+
+    // Populate modal
+    const command = payload.command || payload.args?.join(' ') || '(unknown)';
+    el.execCommandText.textContent = command;
+    el.execWorkDir.textContent = payload.workDir ? `Working directory: ${payload.workDir}` : '';
+    el.execSessionKey.textContent = payload.sessionKey ? `Session: ${payload.sessionKey}` : '';
+
+    // Reset edit area
+    el.execEditArea.style.display = 'none';
+    el.execEditCommand.value = command;
+    el.execEditBtn.textContent = 'Edit & Approve';
+
+    // Show modal
+    el.execApprovalModal.classList.add('open');
+
+    // Play notification sound if available
+    this.showToast('Command Approval', `Agent wants to run: ${command.substring(0, 60)}`, {
+      type: 'warning',
+      duration: 3000
+    });
+
+    // Start countdown
+    this.startExecCountdown();
+  }
+
+  startExecCountdown() {
+    let remaining = 60;
+    const el = this.elements;
+    el.execCountdown.textContent = remaining;
+
+    // Clear any existing timers
+    this.clearExecTimers();
+
+    this.execCountdownInterval = setInterval(() => {
+      remaining--;
+      el.execCountdown.textContent = remaining;
+      if (remaining <= 0) {
+        this.denyExec();
+      }
+    }, 1000);
+
+    this.execApprovalTimer = setTimeout(() => {
+      this.denyExec();
+    }, 60000);
+  }
+
+  clearExecTimers() {
+    if (this.execApprovalTimer) {
+      clearTimeout(this.execApprovalTimer);
+      this.execApprovalTimer = null;
+    }
+    if (this.execCountdownInterval) {
+      clearInterval(this.execCountdownInterval);
+      this.execCountdownInterval = null;
+    }
+  }
+
+  closeExecApproval() {
+    this.clearExecTimers();
+    this.elements.execApprovalModal.classList.remove('open');
+    this.execApprovalPending = null;
+  }
+
+  async approveExec() {
+    const pending = this.execApprovalPending;
+    if (!pending) return;
+
+    try {
+      await this.request('exec.approval.resolve', {
+        approvalId: pending.approvalId,
+        decision: 'approve'
+      });
+    } catch (err) {
+      console.error('Failed to approve exec:', err);
+    }
+
+    this.closeExecApproval();
+  }
+
+  async denyExec() {
+    const pending = this.execApprovalPending;
+    if (!pending) return;
+
+    try {
+      await this.request('exec.approval.resolve', {
+        approvalId: pending.approvalId,
+        decision: 'deny'
+      });
+    } catch (err) {
+      console.error('Failed to deny exec:', err);
+    }
+
+    this.closeExecApproval();
+  }
+
+  async editAndApproveExec() {
+    const el = this.elements;
+    const pending = this.execApprovalPending;
+    if (!pending) return;
+
+    // If edit area is hidden, show it
+    if (el.execEditArea.style.display === 'none') {
+      el.execEditArea.style.display = '';
+      el.execEditBtn.textContent = 'Approve Edited';
+      el.execEditCommand.focus();
+      return;
+    }
+
+    // Submit the edited command
+    const editedCommand = el.execEditCommand.value.trim();
+    if (!editedCommand) return;
+
+    try {
+      await this.request('exec.approval.resolve', {
+        approvalId: pending.approvalId,
+        decision: 'approve',
+        editedCommand
+      });
+    } catch (err) {
+      console.error('Failed to approve edited exec:', err);
+    }
+
+    this.closeExecApproval();
   }
 
 }

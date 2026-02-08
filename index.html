@@ -609,6 +609,40 @@
     </div>
   </div>
 
+  <!-- Exec Approval Modal -->
+  <div class="modal" id="execApprovalModal">
+    <div class="modal-content exec-approval-modal">
+      <div class="modal-header exec-approval-header">
+        <h2><span class="exec-approval-icon">&#9889;</span> Command Approval</h2>
+        <button class="close-btn" id="execApprovalClose">&times;</button>
+      </div>
+      <div class="modal-body exec-approval-body">
+        <p class="exec-approval-label">The agent wants to run:</p>
+        <div class="exec-command-preview" id="execCommandPreview">
+          <span class="exec-command-prompt">$</span>
+          <code id="execCommandText"></code>
+        </div>
+        <div class="exec-approval-meta">
+          <span class="exec-meta-item" id="execWorkDir"></span>
+          <span class="exec-meta-item" id="execSessionKey"></span>
+        </div>
+        <!-- Edit mode (hidden by default) -->
+        <div class="exec-edit-area" id="execEditArea" style="display:none;">
+          <label class="exec-edit-label">Edit command:</label>
+          <textarea id="execEditCommand" rows="3" spellcheck="false"></textarea>
+        </div>
+        <div class="exec-approval-timer">
+          Auto-deny in <span id="execCountdown">60</span>s
+        </div>
+      </div>
+      <div class="exec-approval-actions">
+        <button class="exec-btn exec-btn-deny" id="execDenyBtn">Deny</button>
+        <button class="exec-btn exec-btn-edit" id="execEditBtn">Edit &amp; Approve</button>
+        <button class="exec-btn exec-btn-approve" id="execApproveBtn">Approve</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Notification Container -->
   <div class="toast-container" id="toastContainer"></div>
 

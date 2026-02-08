@@ -6452,3 +6452,173 @@ body {
     padding: 8px;
   }
 }
+
+/* ── Exec Approval Modal ── */
+
+.exec-approval-modal {
+  max-width: 500px;
+  border: 2px solid #f59e0b;
+  animation: exec-pulse 2s ease-in-out infinite;
+}
+
+@keyframes exec-pulse {
+  0%, 100% { border-color: #f59e0b; box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+  50% { border-color: #fbbf24; box-shadow: 0 0 20px rgba(245, 158, 11, 0.3); }
+}
+
+.exec-approval-header {
+  border-bottom-color: #f59e0b44;
+}
+
+.exec-approval-header h2 {
+  color: #fbbf24;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.exec-approval-icon {
+  font-size: 20px;
+}
+
+.exec-approval-body {
+  padding: 20px 24px;
+}
+
+.exec-approval-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0 0 12px;
+}
+
+.exec-command-preview {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 14px;
+  color: var(--text-primary);
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  word-break: break-all;
+  line-height: 1.5;
+}
+
+.exec-command-prompt {
+  color: #22c55e;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.exec-command-preview code {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.exec-approval-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.exec-meta-item:empty {
+  display: none;
+}
+
+.exec-edit-area {
+  margin-top: 14px;
+}
+
+.exec-edit-label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.exec-edit-area textarea {
+  width: 100%;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 14px;
+  color: var(--text-primary);
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.exec-edit-area textarea:focus {
+  outline: none;
+  border-color: #f59e0b;
+}
+
+.exec-approval-timer {
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.exec-approval-timer span {
+  color: #f59e0b;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.exec-approval-actions {
+  display: flex;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border-color);
+  justify-content: flex-end;
+}
+
+.exec-btn {
+  padding: 8px 18px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.exec-btn-deny {
+  background: transparent;
+  color: #ef4444;
+  border-color: #ef444466;
+}
+
+.exec-btn-deny:hover {
+  background: #ef444420;
+  border-color: #ef4444;
+}
+
+.exec-btn-edit {
+  background: transparent;
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.exec-btn-edit:hover {
+  background: var(--bg-hover);
+  border-color: var(--text-muted);
+}
+
+.exec-btn-approve {
+  background: #22c55e;
+  color: #000;
+  border-color: #22c55e;
+}
+
+.exec-btn-approve:hover {
+  background: #16a34a;
+  border-color: #16a34a;
+}
