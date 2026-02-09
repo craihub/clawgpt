@@ -2089,7 +2089,7 @@ window.CLAWGPT_CONFIG = {
 
       // Refresh current chat if it was updated
       if (this.currentChatId && incomingChats[this.currentChatId]) {
-        this.renderMessages();
+        this.renderMessages(true);
       }
 
       this.showToast(`Synced ${merged} chat${merged > 1 ? 's' : ''} from other device`);
@@ -2115,7 +2115,7 @@ window.CLAWGPT_CONFIG = {
       this.saveChats();
       this.renderChatList();
       if (this.currentChatId === chatId) {
-        this.renderMessages();
+        this.renderMessages(true);
       }
       console.log(`[Sync] Incremental update for chat: ${this.chats[chatId].title}`);
       return;
@@ -2161,7 +2161,7 @@ window.CLAWGPT_CONFIG = {
       }
 
       if (this.currentChatId === chat.id) {
-        this.renderMessages();
+        this.renderMessages(true);
       }
 
       console.log(`[Sync] Real-time update for chat: ${chat.title || chat.id}`);
@@ -4153,7 +4153,7 @@ Example: [0, 2, 5]`;
 
         this.saveChats();
         this.renderChatList();
-        this.renderMessages();
+        this.renderMessages(true);
       }
     } catch (error) {
       console.error('Failed to load history:', error);
@@ -4201,7 +4201,7 @@ Example: [0, 2, 5]`;
 
     this.currentChatId = null;
     this.elements.welcome.style.display = 'flex';
-    this.renderMessages();
+    this.renderMessages(true);
     this.renderChatList();
     this.updateTokenDisplay();
     this.elements.messageInput.focus();
@@ -4255,7 +4255,7 @@ Example: [0, 2, 5]`;
 
     this.currentChatId = chatId;
     this._visibleMessageCount = null; // Reset virtualization on chat switch
-    this.renderMessages();
+    this.renderMessages(true);
     this.renderChatList();
     this.updateTokenDisplay(); // Also updates model display
     this.elements.sidebar.classList.remove('open');
@@ -4596,13 +4596,15 @@ Example: [0, 2, 5]`;
     this.contextMenuChatId = null;
   }
 
-  renderMessages() {
+  renderMessages(forceFullRender = false) {
     const chat = this.currentChatId ? this.chats[this.currentChatId] : null;
 
     if (!chat || chat.messages.length === 0) {
       this.elements.welcome.style.display = 'flex';
       this.elements.messages.innerHTML = '';
       this.elements.messages.appendChild(this.elements.welcome);
+      this._lastRenderedChatId = null;
+      this._lastRenderedCount = 0;
       return;
     }
 
@@ -4623,6 +4625,54 @@ Example: [0, 2, 5]`;
     const displayedMessages = visibleMessages.slice(startIdx);
     const hasMore = startIdx > 0;
 
+    const messagesEl = this.elements.messages;
+
+    // --- Incremental render: only append new messages if same chat and messages were added ---
+    const canIncremental = !forceFullRender
+      && this._lastRenderedChatId === this.currentChatId
+      && this._lastRenderedCount > 0
+      && displayedMessages.length > this._lastRenderedCount
+      && !this.streaming;
+
+    if (canIncremental) {
+      const newMessages = displayedMessages.slice(this._lastRenderedCount);
+
+      // Remove streaming indicator before appending real messages
+      const oldStreamDiv = document.getElementById('streaming-message');
+      if (oldStreamDiv) oldStreamDiv.remove();
+
+      // Update the last assistant message's regen button (remove it from previous last)
+      const prevLastAssistant = messagesEl.querySelector('.message.assistant:last-of-type .regen-btn');
+      if (prevLastAssistant) prevLastAssistant.remove();
+
+      newMessages.forEach(({ msg, originalIdx }, i) => {
+        const displayIdx = this._lastRenderedCount + i;
+        const isLastAssistant = msg.role === 'assistant' && displayIdx === displayedMessages.length - 1;
+        const html = this._renderSingleMessage(msg, originalIdx, displayIdx, displayedMessages.length, isLastAssistant);
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = html;
+        const el = wrapper.firstElementChild;
+        messagesEl.appendChild(el);
+      });
+
+      this._lastRenderedCount = displayedMessages.length;
+      this.attachMessageActions();
+      this.updateTokenDisplay();
+
+      // Handle streaming indicator
+      if (this.streaming) {
+        this._appendStreamingIndicator(messagesEl);
+      }
+
+      this.scrollToBottom();
+      this.highlightCode();
+      return;
+    }
+
+    // --- Full render (chat switch, edit, first load, etc.) ---
+    this._lastRenderedChatId = this.currentChatId;
+    this._lastRenderedCount = displayedMessages.length;
+
     // "Load earlier" button
     let loadMoreHtml = '';
     if (hasMore) {
@@ -4631,7 +4681,7 @@ Example: [0, 2, 5]`;
       </div>`;
     }
 
-    this.elements.messages.innerHTML = loadMoreHtml + displayedMessages.map(({ msg, originalIdx }, displayIdx) => {
+    messagesEl.innerHTML = loadMoreHtml + displayedMessages.map(({ msg, originalIdx }, displayIdx) => {
       const isUser = msg.role === 'user';
       const isLastAssistant = !isUser && displayIdx === displayedMessages.length - 1;
       const copyIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
@@ -4710,17 +4760,81 @@ Example: [0, 2, 5]`;
       streamDiv.className = 'message assistant';
       streamDiv.id = 'streaming-message';
       streamDiv.innerHTML = `
-        <div class="message-header">
-          <div class="avatar assistant">AI</div>
-          <span class="message-role">ClawGPT</span>
-        </div>
         <div class="message-content">${this.formatContent(this.streamBuffer) || '<div class="typing-indicator"><span></span><span></span><span></span></div>'}</div>
       `;
       this.elements.messages.appendChild(streamDiv);
     }
 
-    this.scrollToBottom();
+    this.scrollToBottom(true);
     this.highlightCode();
+  }
+
+  _renderSingleMessage(msg, originalIdx, displayIdx, totalCount, isLastAssistant) {
+    const isUser = msg.role === 'user';
+    const copyIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+    const speakIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>`;
+    const stopIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`;
+    const editIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+    const regenIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>`;
+
+    const msgKey = `${this.currentChatId}-${originalIdx}`;
+    const sessionImgs = this.sessionImages?.get(msgKey);
+    let imagesHtml = '';
+    if (sessionImgs && sessionImgs.length > 0) {
+      imagesHtml = `<div class="message-images">${sessionImgs.map((img, i) => {
+        const safeBase64 = img.base64 && img.base64.startsWith('data:') ? img.base64 : '';
+        return `<img src="${safeBase64}" alt="${this.escapeHtml(img.name || 'image')}" title="${this.escapeHtml(img.name || 'image')}" data-img-idx="${i}" class="clickable-img">`;
+      }).join('')}</div>`;
+    } else if (msg.imageNames && msg.imageNames.length > 0) {
+      imagesHtml = `<div class="message-images-placeholder">${msg.imageNames.map(name =>
+        `<span class="image-name">🖼️ ${this.escapeHtml(name)}</span>`
+      ).join('')}</div>`;
+    } else if (msg.imageCount > 0) {
+      imagesHtml = `<div class="message-images-placeholder">🖼️ ${msg.imageCount} image${msg.imageCount > 1 ? 's' : ''} attached</div>`;
+    } else if (msg.images && msg.images.length > 0) {
+      imagesHtml = `<div class="message-images">${msg.images.map((img, i) => {
+        const safeBase64 = img.base64 && img.base64.startsWith('data:') ? img.base64 : '';
+        return `<img src="${safeBase64}" alt="Uploaded image" data-img-idx="${i}" class="clickable-img">`;
+      }).join('')}</div>`;
+    }
+
+    const textFilesHtml = msg.textFiles && msg.textFiles.length > 0
+      ? `<div class="message-text-files">${msg.textFiles.map(f => {
+          const ext = f.name.split('.').pop()?.toLowerCase() || 'txt';
+          return `<div class="message-text-file" title="${this.escapeHtml(f.name)}">
+            <span class="message-text-file-icon">${this.getFileIcon(ext)}</span>
+            <span>${this.escapeHtml(f.name)}</span>
+          </div>`;
+        }).join('')}</div>`
+      : '';
+
+    return `
+      <div class="message ${msg.role}" data-idx="${originalIdx}">
+        <div class="message-header">
+          <div class="avatar ${msg.role}">${isUser ? 'You' : 'AI'}</div>
+          <span class="message-role">${isUser ? 'You' : 'ClawGPT'}</span>
+        </div>
+        ${imagesHtml}
+        ${textFilesHtml}
+        <div class="message-content">${this.formatContent(msg.content)}</div>
+        <div class="message-actions">
+          <button class="msg-action-btn copy-btn" title="Copy">${copyIcon}</button>
+          ${!isUser && this.ttsSupported !== false ? `<button class="msg-action-btn speak-btn" title="Read aloud" data-speak-icon='${speakIcon}' data-stop-icon='${stopIcon}'>${speakIcon}</button>` : ''}
+          ${isUser ? `<button class="msg-action-btn edit-btn" title="Edit">${editIcon}</button>` : ''}
+          ${isLastAssistant ? `<button class="msg-action-btn regen-btn" title="Regenerate">${regenIcon}</button>` : ''}
+        </div>
+      </div>
+    `;
+  }
+
+  _appendStreamingIndicator(messagesEl) {
+    const streamDiv = document.createElement('div');
+    streamDiv.className = 'message assistant';
+    streamDiv.id = 'streaming-message';
+    streamDiv.innerHTML = `
+      <div class="message-content">${this.formatContent(this.streamBuffer) || '<div class="typing-indicator"><span></span><span></span><span></span></div>'}</div>
+    `;
+    messagesEl.appendChild(streamDiv);
   }
 
   loadMoreMessages() {
@@ -4729,7 +4843,7 @@ Example: [0, 2, 5]`;
     // Remember scroll position to avoid jumping to bottom
     const messagesEl = this.elements.messages;
     const prevScrollHeight = messagesEl.scrollHeight;
-    this.renderMessages();
+    this.renderMessages(true);
     // Restore scroll position relative to where user was
     const newScrollHeight = messagesEl.scrollHeight;
     messagesEl.scrollTop = newScrollHeight - prevScrollHeight;
@@ -5129,7 +5243,7 @@ Example: [0, 2, 5]`;
     this.streaming = true;
     this.streamBuffer = '';
     this.updateStreamingUI();
-    this.renderMessages();
+    this.renderMessages(true);
 
     try {
       this.addTokens(this.estimateTokens(lastUserMsg.content));
@@ -5974,13 +6088,14 @@ Example: [0, 2, 5]`;
     }, 50);
   }
 
-  scrollToBottom() {
-    // Only auto-scroll if user is already near the bottom (within 100px)
+  scrollToBottom(force = false) {
     const messagesEl = this.elements.messages;
-    const isNearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 100;
+    const isNearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 300;
     
-    if (isNearBottom) {
-      messagesEl.scrollTop = messagesEl.scrollHeight;
+    if (force || isNearBottom) {
+      requestAnimationFrame(() => {
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      });
     }
   }
 
@@ -6136,19 +6251,15 @@ Example: [0, 2, 5]`;
     this.renderChatList();
     this.renderMessages();
 
-    // Start streaming
+    // Start streaming — append indicator directly instead of full re-render
     console.log('Setting streaming = true before sending message');
     this.streaming = true;
     this.streamBuffer = '';
     this.updateStreamingUI();
-    this.renderMessages();
+    this._appendStreamingIndicator(this.elements.messages);
     
-    // Double RAF ensures layout is complete before scroll
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        this.elements.messages.scrollTop = this.elements.messages.scrollHeight;
-      });
-    });
+    // Scroll to bottom smoothly
+    this.scrollToBottom(true);
 
     try {
       // Check if we're switching to a different chat
@@ -6624,7 +6735,7 @@ Title:`;
         
         // If this is the current chat, update the header too
         if (this.currentChatId === chatId) {
-          this.renderMessages();
+          this.renderMessages(true);
         }
         
         console.log(`AI title updated: "${oldTitle}" → "${title}"`);
