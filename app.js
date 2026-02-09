@@ -4608,12 +4608,16 @@ Example: [0, 2, 5]`;
 
     this.elements.welcome.style.display = 'none';
 
-    // Filter out empty messages, keeping track of original indices
+    // Filter out empty messages and heartbeat noise, keeping track of original indices
+    const HEARTBEAT_PROMPT = 'Read HEARTBEAT.md if it exists';
     const visibleMessages = [];
     chat.messages.forEach((msg, originalIdx) => {
-      if (msg.content && msg.content.trim()) {
-        visibleMessages.push({ msg, originalIdx });
-      }
+      if (!msg.content || !msg.content.trim()) return;
+      const c = msg.content.trim();
+      // Hide heartbeat prompts and HEARTBEAT_OK responses
+      if (c.startsWith(HEARTBEAT_PROMPT)) return;
+      if (c === 'HEARTBEAT_OK') return;
+      visibleMessages.push({ msg, originalIdx });
     });
 
     // Message virtualization: only render last N messages for performance
