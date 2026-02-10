@@ -4231,9 +4231,23 @@ Example: [0, 2, 5]`;
     });
   }
 
+  isHeartbeatSession(chat) {
+    // Hide sessions created by OpenClaw heartbeat polls
+    const title = (chat.title || '').toLowerCase();
+    if (title.startsWith('read heartbeat')) return true;
+    if (title === 'heartbeat_ok') return true;
+    // Check first message content
+    const firstMsg = chat.messages?.[0];
+    if (firstMsg) {
+      const content = (typeof firstMsg.content === 'string' ? firstMsg : firstMsg.message)?.content || '';
+      if (content.toLowerCase().startsWith('read heartbeat')) return true;
+    }
+    return false;
+  }
+
   renderChatList() {
-    // Separate pinned and unpinned
-    const allChats = Object.entries(this.chats);
+    // Separate pinned and unpinned, filtering out heartbeat sessions
+    const allChats = Object.entries(this.chats).filter(([_, c]) => !this.isHeartbeatSession(c));
     const pinnedChats = allChats
       .filter(([_, c]) => c.pinned)
       .sort((a, b) => (a[1].pinnedOrder || 0) - (b[1].pinnedOrder || 0));
